@@ -58,6 +58,7 @@ bot.on('message', async (msg) => {
 
             // Send the video
             await bot.sendVideo(chatId, videoData.url, {
+                caption: '👑 Admin: @phamtheson',
                 reply_to_message_id: msg.message_id
             });
 
