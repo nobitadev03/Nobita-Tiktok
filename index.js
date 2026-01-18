@@ -40,14 +40,16 @@ bot.on('message', async (msg) => {
 
     if (match) {
         const tiktokUrl = match[0];
-        console.log(`Received TikTok URL: ${tiktokUrl} from ${msg.from.username || msg.from.first_name}`);
+        console.log(`Received TikTok URL: ${tiktokUrl} from ${msg.from?.username || msg.from?.first_name || 'unknown'}`);
 
-        // Notify user that we are processing
-        const processingMsg = await bot.sendMessage(chatId, '⏳ Đang tải video không logo...', {
-            reply_to_message_id: msg.message_id
-        });
+        let processingMsg;
 
         try {
+            // Notify user that we are processing
+            processingMsg = await bot.sendMessage(chatId, '⏳ Đang tải video không logo...', {
+                reply_to_message_id: msg.message_id
+            });
+
             const videoData = await getVideoNoWatermark(tiktokUrl);
 
             if (!videoData || !videoData.url) {
@@ -60,14 +62,19 @@ bot.on('message', async (msg) => {
             });
 
             // Delete the processing message
-            bot.deleteMessage(chatId, processingMsg.message_id).catch(() => { });
+            if (processingMsg) {
+                bot.deleteMessage(chatId, processingMsg.message_id).catch(() => { });
+            }
 
         } catch (error) {
             console.error('Error processing TikTok:', error.message);
-            bot.editMessageText('❌ Có lỗi xảy ra khi tải video. Vui lòng thử lại hoặc link không hợp lệ.', {
-                chat_id: chatId,
-                message_id: processingMsg.message_id
-            });
+            // Only try to edit message if we successfully sent the processing message
+            if (processingMsg) {
+                bot.editMessageText('❌ Có lỗi xảy ra. Link lỗi hoặc Bot không gửi được file (do quyền hạn/file quá nặng).', {
+                    chat_id: chatId,
+                    message_id: processingMsg.message_id
+                }).catch(() => { });
+            }
         }
     }
 });
