@@ -13,6 +13,25 @@ if (!token) {
 
 const bot = new TelegramBot(token, { polling: true });
 
+// Admin Configuration
+const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID || '0');
+const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '3');
+
+// Queue System
+const requestQueue = [];
+let processingCount = 0;
+
+// Statistics
+const stats = {
+    totalRequests: 0,
+    successfulDownloads: 0,
+    failedDownloads: 0,
+    activeUsers: new Map(), // userId -> {username, count, lastUsed}
+};
+
+// Banned Users
+const bannedUsers = new Set();
+
 // --- Server for Render/Heroku (Keep Alive) ---
 const http = require('http');
 const server = http.createServer((req, res) => {
@@ -23,6 +42,7 @@ const server = http.createServer((req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    console.log(`Admin User ID: ${ADMIN_USER_ID}`);
 });
 // ---------------------------------------------
 
@@ -54,6 +74,151 @@ function checkRateLimit(userId) {
 // Expanded regex to detect TikTok links - covers more formats
 const tiktokRegex = /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t)\.)?tiktok\.com\/(?:@[\w.-]+\/video\/\d+|v\/\d+|[\w-]+|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt)\.tiktok\.com\/[\w]+/i;
 
+// Helper: Check if user is admin
+function isAdmin(userId) {
+    return userId === ADMIN_USER_ID;
+}
+
+// Helper: Update user stats
+function updateUserStats(userId, username) {
+    if (!stats.activeUsers.has(userId)) {
+        stats.activeUsers.set(userId, {
+            username: username || 'Unknown',
+            count: 0,
+            lastUsed: Date.now()
+        });
+    }
+    const user = stats.activeUsers.get(userId);
+    user.count++;
+    user.lastUsed = Date.now();
+    user.username = username || user.username;
+}
+
+// Admin Commands Handler
+bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const command = match[1];
+    const args = match[2]?.trim();
+
+    // Check if command is admin-only
+    const adminCommands = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue'];
+    if (adminCommands.includes(command) && !isAdmin(userId)) {
+        bot.sendMessage(chatId, '❌ Bạn không có quyền sử dụng lệnh này.');
+        return;
+    }
+
+    switch (command) {
+        case 'start':
+            bot.sendMessage(chatId,
+                '👋 Chào mừng đến với Nobita TikTok Bot!\n\n' +
+                '📹 Gửi link TikTok để tải video không logo\n' +
+                '⚡ Hỗ trợ tất cả định dạng link TikTok\n\n' +
+                (isAdmin(userId) ? '🔧 Admin commands:\n/stats - Thống kê\n/users - Người dùng\n/queue - Hàng đợi\n/broadcast <msg> - Thông báo\n/ban <id> - Chặn user\n/unban <id> - Bỏ chặn' : '')
+            );
+            break;
+
+        case 'stats':
+            const successRate = stats.totalRequests > 0
+                ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1)
+                : 0;
+            bot.sendMessage(chatId,
+                `📊 *Thống kê Bot*\n\n` +
+                `📥 Tổng requests: ${stats.totalRequests}\n` +
+                `✅ Thành công: ${stats.successfulDownloads}\n` +
+                `❌ Thất bại: ${stats.failedDownloads}\n` +
+                `📈 Tỷ lệ thành công: ${successRate}%\n` +
+                `👥 Người dùng hoạt động: ${stats.activeUsers.size}\n` +
+                `📋 Hàng đợi: ${requestQueue.length}\n` +
+                `⚙️ Đang xử lý: ${processingCount}/${MAX_CONCURRENT}\n` +
+                `🚫 Banned users: ${bannedUsers.size}`,
+                { parse_mode: 'Markdown' }
+            );
+            break;
+
+        case 'users':
+            if (stats.activeUsers.size === 0) {
+                bot.sendMessage(chatId, '📭 Chưa có người dùng nào.');
+                break;
+            }
+            let userList = '👥 *Danh sách người dùng:*\n\n';
+            const sortedUsers = Array.from(stats.activeUsers.entries())
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 20);
+
+            sortedUsers.forEach(([id, data], index) => {
+                const lastUsed = new Date(data.lastUsed).toLocaleString('vi-VN');
+                userList += `${index + 1}. @${data.username} (ID: \`${id}\`)\n`;
+                userList += `   📥 ${data.count} downloads | 🕐 ${lastUsed}\n\n`;
+            });
+            bot.sendMessage(chatId, userList, { parse_mode: 'Markdown' });
+            break;
+
+        case 'broadcast':
+            if (!args) {
+                bot.sendMessage(chatId, '❌ Sử dụng: /broadcast <message>');
+                break;
+            }
+            let sent = 0;
+            for (const [userId] of stats.activeUsers) {
+                try {
+                    await bot.sendMessage(userId, `📢 *Thông báo từ Admin:*\n\n${args}`, { parse_mode: 'Markdown' });
+                    sent++;
+                } catch (e) {
+                    console.error(`Failed to send to ${userId}:`, e.message);
+                }
+            }
+            bot.sendMessage(chatId, `✅ Đã gửi thông báo tới ${sent}/${stats.activeUsers.size} người dùng.`);
+            break;
+
+        case 'ban':
+            if (!args) {
+                bot.sendMessage(chatId, '❌ Sử dụng: /ban <user_id>');
+                break;
+            }
+            const banUserId = parseInt(args);
+            if (banUserId === ADMIN_USER_ID) {
+                bot.sendMessage(chatId, '❌ Không thể ban admin!');
+                break;
+            }
+            bannedUsers.add(banUserId);
+            bot.sendMessage(chatId, `🚫 Đã ban user ID: ${banUserId}`);
+            break;
+
+        case 'unban':
+            if (!args) {
+                bot.sendMessage(chatId, '❌ Sử dụng: /unban <user_id>');
+                break;
+            }
+            const unbanUserId = parseInt(args);
+            bannedUsers.delete(unbanUserId);
+            bot.sendMessage(chatId, `✅ Đã unban user ID: ${unbanUserId}`);
+            break;
+
+        case 'queue':
+            if (requestQueue.length === 0 && processingCount === 0) {
+                bot.sendMessage(chatId, '📭 Hàng đợi trống.');
+                break;
+            }
+            let queueInfo = `📋 *Trạng thái hàng đợi:*\n\n`;
+            queueInfo += `⚙️ Đang xử lý: ${processingCount}/${MAX_CONCURRENT}\n`;
+            queueInfo += `📊 Chờ xử lý: ${requestQueue.length}\n\n`;
+
+            if (requestQueue.length > 0) {
+                queueInfo += '*Danh sách chờ:*\n';
+                requestQueue.slice(0, 5).forEach((req, idx) => {
+                    queueInfo += `${idx + 1}. @${req.username} - ${req.url.substring(0, 30)}...\n`;
+                });
+                if (requestQueue.length > 5) {
+                    queueInfo += `\n...và ${requestQueue.length - 5} requests khác`;
+                }
+            }
+            bot.sendMessage(chatId, queueInfo, { parse_mode: 'Markdown' });
+            break;
+    }
+});
+
+// TikTok Message Handler
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -64,6 +229,15 @@ bot.on('message', async (msg) => {
     const match = text.match(tiktokRegex);
 
     if (match) {
+        // Check if user is banned
+        if (bannedUsers.has(userId)) {
+            bot.sendMessage(chatId, '🚫 Bạn đã bị chặn sử dụng bot này.').catch(console.error);
+            if (ADMIN_USER_ID) {
+                bot.sendMessage(ADMIN_USER_ID, `⚠️ Banned user ${userId} (@${msg.from?.username}) tried to use bot`).catch(console.error);
+            }
+            return;
+        }
+
         // Check rate limit
         if (!checkRateLimit(userId)) {
             bot.sendMessage(chatId, '⚠️ Bạn đang gửi quá nhanh! Vui lòng đợi 10 giây.', {
@@ -73,100 +247,143 @@ bot.on('message', async (msg) => {
         }
 
         const tiktokUrl = match[0];
-        console.log(`[${new Date().toISOString()}] Received TikTok URL: ${tiktokUrl} from ${msg.from?.username || msg.from?.first_name || 'unknown'} (ID: ${userId})`);
+        const username = msg.from?.username || msg.from?.first_name || 'unknown';
 
-        let processingMsg;
+        stats.totalRequests++;
+        updateUserStats(userId, username);
 
-        try {
-            // Notify user that we are processing
-            processingMsg = await bot.sendMessage(chatId, '⏳ Đang tải video không logo...', {
+        console.log(`[${new Date().toISOString()}] Received TikTok URL: ${tiktokUrl} from ${username} (ID: ${userId})`);
+
+        // Add to queue
+        const queueItem = {
+            chatId,
+            userId,
+            username,
+            url: tiktokUrl,
+            messageId: msg.message_id,
+            timestamp: Date.now()
+        };
+
+        requestQueue.push(queueItem);
+
+        // Notify user of queue position
+        const position = requestQueue.length;
+        if (position > 1 || processingCount >= MAX_CONCURRENT) {
+            bot.sendMessage(chatId, `📋 Đã thêm vào hàng đợi (vị trí: ${position})`, {
                 reply_to_message_id: msg.message_id
-            });
-
-            const videoData = await getVideoNoWatermark(tiktokUrl);
-
-            if (!videoData || !videoData.url) {
-                throw new Error('Could not retrieve video URL');
-            }
-
-            console.log(`[${new Date().toISOString()}] Downloading video...`);
-
-            // Download video to temporary file
-            // Telegram can't access TikTok CDN URLs directly, so we must download first
-            const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
-            const tempFilePath = path.join(__dirname, tempFileName);
-
-            const writer = fs.createWriteStream(tempFilePath);
-            const videoResponse = await axios.get(videoData.url, {
-                responseType: 'stream',
-                timeout: 60000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://www.tiktok.com/'
-                }
-            });
-
-            videoResponse.data.pipe(writer);
-
-            // Wait for download to complete
-            await new Promise((resolve, reject) => {
-                writer.on('finish', resolve);
-                writer.on('error', reject);
-            });
-
-            console.log(`[${new Date().toISOString()}] Video downloaded. Uploading to Telegram...`);
-
-            // Send the video file
-            await bot.sendVideo(chatId, tempFilePath, {
-                caption: '👑 Admin: @phamtheson',
-                reply_to_message_id: msg.message_id,
-                supports_streaming: true
-            });
-
-            // Delete temp file after sending
-            fs.unlink(tempFilePath, (err) => {
-                if (err) console.error('Error deleting temp file:', err);
-                else console.log(`[${new Date().toISOString()}] Temp file deleted: ${tempFileName}`);
-            });
-
-            // Delete the processing message
-            if (processingMsg) {
-                bot.deleteMessage(chatId, processingMsg.message_id).catch(() => { });
-            }
-
-            console.log(`[${new Date().toISOString()}] ✅ Video sent successfully!`);
-
-        } catch (error) {
-            console.error('Error processing TikTok:', error.message);
-            console.error('Full error:', error);
-
-            // Determine specific error message
-            let errorMessage = '❌ Có lỗi xảy ra. ';
-
-            if (error.message.includes('Video quá lớn')) {
-                errorMessage += error.message;
-            } else if (error.message.includes('Could not retrieve video URL')) {
-                errorMessage += 'Link không hợp lệ hoặc video đã bị xóa. Vui lòng thử link khác.';
-            } else if (error.message.includes('timeout')) {
-                errorMessage += 'Timeout khi tải video. Vui lòng thử lại sau.';
-            } else if (error.message.includes('Network')) {
-                errorMessage += 'Lỗi kết nối mạng. Vui lòng thử lại.';
-            } else {
-                errorMessage += 'Link lỗi hoặc Bot không gửi được file (do quyền hạn/file quá nặng).';
-            }
-
-            errorMessage += '\n\n💡 Tips: Hãy chắc chắn link TikTok hợp lệ và video không quá lớn (max 50MB).';
-
-            // Only try to edit message if we successfully sent the processing message
-            if (processingMsg) {
-                bot.editMessageText(errorMessage, {
-                    chat_id: chatId,
-                    message_id: processingMsg.message_id
-                }).catch(() => { });
-            }
+            }).catch(console.error);
         }
+
+        // Process queue
+        processQueue();
     }
 });
+
+// Queue Processor
+async function processQueue() {
+    // Check if we can process more
+    if (processingCount >= MAX_CONCURRENT || requestQueue.length === 0) {
+        return;
+    }
+
+    // Get next request from queue
+    const request = requestQueue.shift();
+    if (!request) return;
+
+    processingCount++;
+    console.log(`[Queue] Processing: ${processingCount}/${MAX_CONCURRENT}, Queue: ${requestQueue.length}`);
+
+    let processingMsg;
+
+    try {
+        // Notify user that we are processing
+        processingMsg = await bot.sendMessage(request.chatId, '⏳ Đang tải video không logo...', {
+            reply_to_message_id: request.messageId
+        });
+
+        const videoData = await getVideoNoWatermark(request.url);
+
+        if (!videoData || !videoData.url) {
+            throw new Error('Could not retrieve video URL');
+        }
+
+        console.log(`[${new Date().toISOString()}] Downloading video...`);
+
+        // Download video to temporary file
+        const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+        const tempFilePath = path.join(__dirname, tempFileName);
+
+        const writer = fs.createWriteStream(tempFilePath);
+        const videoResponse = await axios.get(videoData.url, {
+            responseType: 'stream',
+            timeout: 60000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://www.tiktok.com/'
+            }
+        });
+
+        videoResponse.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+
+        console.log(`[${new Date().toISOString()}] Video downloaded. Uploading to Telegram...`);
+
+        await bot.sendVideo(request.chatId, tempFilePath, {
+            caption: '👑 Admin: @phamtheson',
+            reply_to_message_id: request.messageId,
+            supports_streaming: true
+        });
+
+        fs.unlink(tempFilePath, (err) => {
+            if (err) console.error('Error deleting temp file:', err);
+            else console.log(`[${new Date().toISOString()}] Temp file deleted: ${tempFileName}`);
+        });
+
+        if (processingMsg) {
+            bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+        }
+
+        console.log(`[${new Date().toISOString()}] ✅ Video sent successfully!`);
+        stats.successfulDownloads++;
+
+    } catch (error) {
+        console.error('Error processing TikTok:', error.message);
+        stats.failedDownloads++;
+
+        let errorMessage = '❌ Có lỗi xảy ra. ';
+
+        if (error.message.includes('Video quá lớn')) {
+            errorMessage += error.message;
+        } else if (error.message.includes('Could not retrieve video URL')) {
+            errorMessage += 'Link không hợp lệ hoặc video đã bị xóa. Vui lòng thử link khác.';
+        } else if (error.message.includes('timeout')) {
+            errorMessage += 'Timeout khi tải video. Vui lòng thử lại sau.';
+        } else if (error.message.includes('Network')) {
+            errorMessage += 'Lỗi kết nối mạng. Vui lòng thử lại.';
+        } else {
+            errorMessage += 'Link lỗi hoặc Bot không gửi được file (do quyền hạn/file quá nặng).';
+        }
+
+        errorMessage += '\n\n💡 Tips: Hãy chắc chắn link TikTok hợp lệ và video không quá lớn (max 50MB).';
+
+        if (processingMsg) {
+            bot.editMessageText(errorMessage, {
+                chat_id: request.chatId,
+                message_id: processingMsg.message_id
+            }).catch(() => { });
+        }
+    } finally {
+        processingCount--;
+        console.log(`[Queue] Finished processing. Active: ${processingCount}, Queue: ${requestQueue.length}`);
+
+        // Process next item in queue
+        setImmediate(() => processQueue());
+    }
+}
 
 // Retry helper with exponential backoff
 async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 1000) {
@@ -184,7 +401,6 @@ async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 1000) {
 
 // Normalize shortened URLs
 async function normalizeUrl(url) {
-    // If it's a shortened URL (vm.tiktok.com or vt.tiktok.com), expand it
     if (url.includes('vm.tiktok.com') || url.includes('vt.tiktok.com')) {
         try {
             console.log('Expanding shortened URL...');
@@ -207,11 +423,9 @@ async function normalizeUrl(url) {
 
 // Helper function to get video without watermark
 async function getVideoNoWatermark(url) {
-    // Normalize URL first
     const normalizedUrl = await normalizeUrl(url);
     console.log(`Processing URL: ${normalizedUrl}`);
 
-    // Try multiple APIs for better reliability
     const apis = [
         // API 1: TikWM (Primary - Most Reliable)
         async () => {
@@ -252,7 +466,6 @@ async function getVideoNoWatermark(url) {
                 }
             );
 
-            // Parse HTML response to extract video URL
             const urlMatch = response.data.match(/<a[^>]+href="([^"]+)"[^>]*>[\s\S]*?no watermark/i);
             if (urlMatch && urlMatch[1]) {
                 console.log('✅ SSSTik API success!');
@@ -340,13 +553,11 @@ async function getVideoNoWatermark(url) {
         }
     ];
 
-    // Try each API in sequence with retry logic
     for (let i = 0; i < apis.length; i++) {
         try {
             const result = await retryWithBackoff(apis[i], 2, 1000);
 
             if (result && result.url) {
-                // Verify the URL is accessible and check file size
                 try {
                     console.log('Verifying video URL...');
                     const headResponse = await axios.head(result.url, {
@@ -358,7 +569,6 @@ async function getVideoNoWatermark(url) {
 
                     console.log(`✅ Video verified! Size: ${fileSizeMB > 0 ? fileSizeMB.toFixed(2) + ' MB' : 'Unknown'}`);
 
-                    // Telegram bot API has a 50MB limit for videos
                     if (contentLength > 50 * 1024 * 1024) {
                         console.error(`❌ Video too large: ${fileSizeMB.toFixed(2)} MB (max 50MB)`);
                         throw new Error(`Video quá lớn (${fileSizeMB.toFixed(2)}MB). Telegram chỉ hỗ trợ tối đa 50MB.`);
@@ -370,7 +580,6 @@ async function getVideoNoWatermark(url) {
                     if (verifyError.message.includes('Video quá lớn')) {
                         throw verifyError;
                     }
-                    // If just verification fails but we have URL, still try it
                     if (result.url) {
                         console.log('⚠️ Proceeding with unverified URL...');
                         return result;
@@ -379,7 +588,6 @@ async function getVideoNoWatermark(url) {
             }
         } catch (error) {
             console.error(`❌ API ${i + 1} failed:`, error.message);
-            // Continue to next API
         }
     }
 
@@ -407,11 +615,9 @@ function extractVideoId(url) {
 // Global error handler for polling errors
 bot.on('polling_error', (error) => {
     console.error('Polling error:', error.message);
-    // Don't crash on polling errors, just log them
 });
 
 // Global error handler for webhook errors
 bot.on('webhook_error', (error) => {
     console.error('Webhook error:', error.message);
 });
-
