@@ -16,6 +16,10 @@ const bot = new TelegramBot(token, { polling: true });
 // Admin Configuration
 const ADMIN_USER_ID = parseInt(process.env.ADMIN_USER_ID || '0');
 const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '3');
+// URL công khai (Render tự cung cấp RENDER_EXTERNAL_URL)
+const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
+const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
+const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
 
 // Queue System
 const requestQueue = [];
@@ -271,7 +275,7 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
     const args = match[2]?.trim();
 
     // Check if command is admin-only
-    const adminCommands = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue', 'addvip', 'removevip', 'vips'];
+    const adminCommands = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue', 'addvip', 'removevip', 'vips', 'panel'];
     if (adminCommands.includes(command) && !isAdmin(userId)) {
         bot.sendMessage(chatId, '❌ Bạn không có quyền sử dụng lệnh này.');
         return;
@@ -285,11 +289,18 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 '⚡ Hỗ trợ tất cả định dạng link TikTok\n' +
                 (isVip(userId) ? '⭐ Bạn là thành viên VIP - ưu tiên cao nhất!\n' : '') +
                 '\n' +
-                (isAdmin(userId) ? '🔧 Admin commands:\n/stats - Thống kê\n/users - Người dùng\n/queue - Hàng đợi\n/broadcast <msg> - Thông báo\n/ban <id> - Chặn user\n/unban <id> - Bỏ chặn\n/addvip <id> - Thêm VIP\n/removevip <id> - Xóa VIP\n/vips - DS VIP' : '')
+                (isAdmin(userId) ? '🔧 Admin commands:\n/stats - Thống kê\n/users - Người dùng\n/queue - Hàng đợi\n/broadcast <msg> - Thông báo\n/ban <id> - Chặn user\n/unban <id> - Bỏ chặn\n/addvip <id> - Thêm VIP\n/removevip <id> - Xóa VIP\n/vips - DS VIP\n/panel - Mở Admin Dashboard' : ''),
+                isAdmin(userId) ? {
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: '🖥️ MọI ADMIN DASHBOARD', url: DASHBOARD_URL }
+                        ]]
+                    }
+                } : {}
             );
             break;
 
-        case 'stats':
+        case 'stats': {
             const successRate = stats.totalRequests > 0
                 ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1)
                 : 0;
@@ -304,9 +315,38 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 `📋 Hàng đợi: ${requestQueue.length}\n` +
                 `⚙️ Đang xử lý: ${processingCount}/${MAX_CONCURRENT}\n` +
                 `🚫 Banned users: ${bannedUsers.size}`,
-                { parse_mode: 'Markdown' }
+                {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [[
+                            { text: '🖥️ Xem Dashboard đầy đủ', url: DASHBOARD_URL }
+                        ]]
+                    }
+                }
             );
             break;
+        }
+
+        case 'panel': {
+            const successRateP = stats.totalRequests > 0
+                ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
+            bot.sendMessage(chatId,
+                `🖥️ *Admin Dashboard*\n\n` +
+                `📥 Tổng: ${stats.totalRequests} requests\n` +
+                `✅ Thành công: ${stats.successfulDownloads} (${successRateP}%)\n` +
+                `👥 Users: ${stats.activeUsers.size} | ⭐ VIP: ${vipUsers.size} | 🚫 Banned: ${bannedUsers.size}\n` +
+                `📋 Hàng đợi: ${requestQueue.length} | ⚙️ Xử lý: ${processingCount}/${MAX_CONCURRENT}`,
+                {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '🌐 Mở Web Dashboard', url: DASHBOARD_URL }]
+                        ]
+                    }
+                }
+            );
+            break;
+        }
 
         case 'users':
             if (stats.activeUsers.size === 0) {
