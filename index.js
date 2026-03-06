@@ -21,8 +21,10 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '3');
 const requestQueue = [];
 let processingCount = 0;
 
-// Statistics
-const stats = {
+// Data Persistence
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+let stats = {
     totalRequests: 0,
     successfulDownloads: 0,
     failedDownloads: 0,
@@ -30,14 +32,172 @@ const stats = {
 };
 
 // Banned Users
-const bannedUsers = new Set();
+let bannedUsers = new Set();
 
-// --- Server for Render/Heroku (Keep Alive) ---
+// VIP Users
+let vipUsers = new Set();
+
+// Hourly stats for dashboard (24 slots)
+let hourlyStats = new Array(24).fill(0);
+
+// Load data on startup
+function loadData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+            if (data.stats) {
+                stats.totalRequests = data.stats.totalRequests || 0;
+                stats.successfulDownloads = data.stats.successfulDownloads || 0;
+                stats.failedDownloads = data.stats.failedDownloads || 0;
+                if (data.stats.activeUsers) {
+                    stats.activeUsers = new Map(data.stats.activeUsers);
+                }
+            }
+            if (data.bannedUsers) {
+                bannedUsers = new Set(data.bannedUsers);
+            }
+            if (data.vipUsers) {
+                vipUsers = new Set(data.vipUsers);
+            }
+            if (data.hourlyStats) {
+                hourlyStats = data.hourlyStats;
+            }
+            console.log('✅ Loaded saved data.');
+        }
+    } catch (e) {
+        console.error('Error loading data:', e.message);
+    }
+}
+
+function saveData() {
+    try {
+        const dataToSave = {
+            stats: {
+                totalRequests: stats.totalRequests,
+                successfulDownloads: stats.successfulDownloads,
+                failedDownloads: stats.failedDownloads,
+                activeUsers: Array.from(stats.activeUsers.entries())
+            },
+            bannedUsers: Array.from(bannedUsers),
+            vipUsers: Array.from(vipUsers),
+            hourlyStats
+        };
+        fs.writeFileSync(DATA_FILE, JSON.stringify(dataToSave, null, 2));
+    } catch (e) {
+        console.error('Error saving data:', e.message);
+    }
+}
+
+loadData();
+
+// --- Server for Render/Heroku (Keep Alive + Dashboard) ---
 const http = require('http');
+const url = require('url');
+
 const server = http.createServer((req, res) => {
+    const reqUrl = url.parse(req.url, true);
+
+    // API endpoint for stats (secured by token query param)
+    if (reqUrl.pathname === '/api/stats') {
+        const token = reqUrl.query.token;
+        if (!process.env.DASHBOARD_TOKEN || token !== process.env.DASHBOARD_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            return res.end(JSON.stringify({ error: 'Unauthorized' }));
+        }
+        const successRate = stats.totalRequests > 0
+            ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1)
+            : 0;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+            totalRequests: stats.totalRequests,
+            successfulDownloads: stats.successfulDownloads,
+            failedDownloads: stats.failedDownloads,
+            successRate,
+            totalUsers: stats.activeUsers.size,
+            vipUsers: vipUsers.size,
+            bannedUsers: bannedUsers.size,
+            queueLength: requestQueue.length,
+            processing: processingCount,
+            maxConcurrent: MAX_CONCURRENT,
+            hourlyStats
+        }));
+    }
+
+    // Dashboard HTML page (secured by token query param)
+    if (reqUrl.pathname === '/dashboard') {
+        const token = reqUrl.query.token;
+        if (!process.env.DASHBOARD_TOKEN || token !== process.env.DASHBOARD_TOKEN) {
+            res.writeHead(401, { 'Content-Type': 'text/html' });
+            return res.end('<h1>401 Unauthorized</h1><p>Thêm ?token=YOUR_TOKEN vào URL</p>');
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(getDashboardHTML(token));
+    }
+
+    // Default status
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running!');
 });
+
+function getDashboardHTML(token) {
+    const successRate = stats.totalRequests > 0
+        ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🤖 Nobita Bot Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background:#0f0f1a; color:#e0e0ff; min-height:100vh; }
+  .header { background:linear-gradient(135deg,#1a1a3e,#2d1b69); padding:24px 32px; display:flex; align-items:center; gap:16px; border-bottom:1px solid #333; }
+  .header h1 { font-size:1.8rem; } .header span { font-size:2rem; }
+  .subtitle { color:#aaa; font-size:.9rem; margin-top:4px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; padding:24px 32px; }
+  .card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:20px; text-align:center; transition:.2s; }
+  .card:hover { transform:translateY(-3px); border-color:#7c3aed; }
+  .card .num { font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .card .label { font-size:.8rem; color:#888; margin-top:6px; text-transform:uppercase; letter-spacing:1px; }
+  .chart-section { padding:0 32px 32px; }
+  .chart-card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:24px; }
+  .chart-card h3 { margin-bottom:16px; color:#a78bfa; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
+  .badge-ok { background:#065f46; color:#6ee7b7; } .badge-warn { background:#78350f; color:#fcd34d; }
+  .refresh { position:fixed; bottom:24px; right:24px; background:linear-gradient(135deg,#7c3aed,#06b6d4); color:#fff; border:none; border-radius:50%; width:52px; height:52px; font-size:1.4rem; cursor:pointer; box-shadow:0 4px 20px #7c3aed66; }
+</style>
+</head>
+<body>
+<div class="header"><span>🤖</span><div><h1>Nobita Bot Dashboard</h1><div class="subtitle">Cập nhật lúc: ${new Date().toLocaleString('vi-VN')} &nbsp; <span class="badge badge-ok">ONLINE</span></div></div></div>
+<div class="grid">
+  <div class="card"><div class="num">${stats.totalRequests}</div><div class="label">📥 Tổng Requests</div></div>
+  <div class="card"><div class="num">${stats.successfulDownloads}</div><div class="label">✅ Thành Công</div></div>
+  <div class="card"><div class="num">${stats.failedDownloads}</div><div class="label">❌ Thất Bại</div></div>
+  <div class="card"><div class="num">${successRate}%</div><div class="label">📈 Tỷ Lệ Thành Công</div></div>
+  <div class="card"><div class="num">${stats.activeUsers.size}</div><div class="label">👥 Người Dùng</div></div>
+  <div class="card"><div class="num">${vipUsers.size}</div><div class="label">⭐ VIP Users</div></div>
+  <div class="card"><div class="num">${bannedUsers.size}</div><div class="label">🚫 Banned</div></div>
+  <div class="card"><div class="num">${requestQueue.length}</div><div class="label">📋 Hàng Đợi</div></div>
+</div>
+<div class="chart-section">
+  <div class="chart-card">
+    <h3>📊 Downloads trong 24 giờ qua</h3>
+    <canvas id="hourlyChart" height="100"></canvas>
+  </div>
+</div>
+<button class="refresh" onclick="location.reload()" title="Làm mới">🔄</button>
+<script>
+const labels = Array.from({length:24},(_, i) => { const h = (new Date().getHours() - 23 + i + 24) % 24; return h + ':00'; });
+const data = ${JSON.stringify(hourlyStats)};
+new Chart(document.getElementById('hourlyChart'), {
+  type:'bar',
+  data:{ labels, datasets:[{ label:'Downloads', data, backgroundColor:'rgba(124,58,237,0.6)', borderColor:'#7c3aed', borderWidth:2, borderRadius:6 }] },
+  options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#e0e0ff' } } }, scales:{ x:{ ticks:{ color:'#888' }, grid:{ color:'#222' } }, y:{ ticks:{ color:'#888' }, grid:{ color:'#222' } } } }
+});
+<\/script>
+</body></html>`;
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
@@ -71,12 +231,17 @@ function checkRateLimit(userId) {
     return true;
 }
 
-// Expanded regex to detect TikTok links - covers more formats
-const tiktokRegex = /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t)\.)?tiktok\.com\/(?:@[\w.-]+\/video\/\d+|v\/\d+|[\w-]+|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt)\.tiktok\.com\/[\w]+/i;
+// Expanded regex to detect TikTok and Douyin links - covers more formats
+const tiktokRegex = /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|v\/\d+|[\w-]+|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i;
 
 // Helper: Check if user is admin
 function isAdmin(userId) {
     return userId === ADMIN_USER_ID;
+}
+
+// Helper: Check if user is VIP
+function isVip(userId) {
+    return vipUsers.has(userId);
 }
 
 // Helper: Update user stats
@@ -92,6 +257,10 @@ function updateUserStats(userId, username) {
     user.count++;
     user.lastUsed = Date.now();
     user.username = username || user.username;
+    // Track hourly stats
+    const hour = new Date().getHours();
+    hourlyStats[hour] = (hourlyStats[hour] || 0) + 1;
+    saveData();
 }
 
 // Admin Commands Handler
@@ -102,7 +271,7 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
     const args = match[2]?.trim();
 
     // Check if command is admin-only
-    const adminCommands = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue'];
+    const adminCommands = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue', 'addvip', 'removevip', 'vips'];
     if (adminCommands.includes(command) && !isAdmin(userId)) {
         bot.sendMessage(chatId, '❌ Bạn không có quyền sử dụng lệnh này.');
         return;
@@ -112,9 +281,11 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
         case 'start':
             bot.sendMessage(chatId,
                 '👋 Chào mừng đến với Nobita TikTok Bot!\n\n' +
-                '📹 Gửi link TikTok để tải video không logo\n' +
-                '⚡ Hỗ trợ tất cả định dạng link TikTok\n\n' +
-                (isAdmin(userId) ? '🔧 Admin commands:\n/stats - Thống kê\n/users - Người dùng\n/queue - Hàng đợi\n/broadcast <msg> - Thông báo\n/ban <id> - Chặn user\n/unban <id> - Bỏ chặn' : '')
+                '📹 Gửi link TikTok / Douyin để tải video không logo\n' +
+                '⚡ Hỗ trợ tất cả định dạng link TikTok\n' +
+                (isVip(userId) ? '⭐ Bạn là thành viên VIP - ưu tiên cao nhất!\n' : '') +
+                '\n' +
+                (isAdmin(userId) ? '🔧 Admin commands:\n/stats - Thống kê\n/users - Người dùng\n/queue - Hàng đợi\n/broadcast <msg> - Thông báo\n/ban <id> - Chặn user\n/unban <id> - Bỏ chặn\n/addvip <id> - Thêm VIP\n/removevip <id> - Xóa VIP\n/vips - DS VIP' : '')
             );
             break;
 
@@ -129,6 +300,7 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 `❌ Thất bại: ${stats.failedDownloads}\n` +
                 `📈 Tỷ lệ thành công: ${successRate}%\n` +
                 `👥 Người dùng hoạt động: ${stats.activeUsers.size}\n` +
+                `⭐ VIP users: ${vipUsers.size}\n` +
                 `📋 Hàng đợi: ${requestQueue.length}\n` +
                 `⚙️ Đang xử lý: ${processingCount}/${MAX_CONCURRENT}\n` +
                 `🚫 Banned users: ${bannedUsers.size}`,
@@ -148,7 +320,8 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
 
             sortedUsers.forEach(([id, data], index) => {
                 const lastUsed = new Date(data.lastUsed).toLocaleString('vi-VN');
-                userList += `${index + 1}. @${data.username} (ID: \`${id}\`)\n`;
+                const vipBadge = vipUsers.has(Number(id)) ? ' ⭐VIP' : '';
+                userList += `${index + 1}. @${data.username}${vipBadge} (ID: \`${id}\`)\n`;
                 userList += `   📥 ${data.count} downloads | 🕐 ${lastUsed}\n\n`;
             });
             bot.sendMessage(chatId, userList, { parse_mode: 'Markdown' });
@@ -182,6 +355,7 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 break;
             }
             bannedUsers.add(banUserId);
+            saveData();
             bot.sendMessage(chatId, `🚫 Đã ban user ID: ${banUserId}`);
             break;
 
@@ -192,7 +366,44 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
             }
             const unbanUserId = parseInt(args);
             bannedUsers.delete(unbanUserId);
+            saveData();
             bot.sendMessage(chatId, `✅ Đã unban user ID: ${unbanUserId}`);
+            break;
+
+        case 'addvip':
+            if (!args) {
+                bot.sendMessage(chatId, '❌ Sử dụng: /addvip <user_id>');
+                break;
+            }
+            const addVipId = parseInt(args);
+            vipUsers.add(addVipId);
+            saveData();
+            bot.sendMessage(chatId, `⭐ Đã thêm VIP cho user ID: ${addVipId}`);
+            break;
+
+        case 'removevip':
+            if (!args) {
+                bot.sendMessage(chatId, '❌ Sử dụng: /removevip <user_id>');
+                break;
+            }
+            const removeVipId = parseInt(args);
+            vipUsers.delete(removeVipId);
+            saveData();
+            bot.sendMessage(chatId, `✅ Đã xóa VIP user ID: ${removeVipId}`);
+            break;
+
+        case 'vips':
+            if (vipUsers.size === 0) {
+                bot.sendMessage(chatId, '📭 Chưa có VIP user nào.');
+                break;
+            }
+            let vipList = '⭐ *Danh sách VIP:*\n\n';
+            Array.from(vipUsers).forEach((id, index) => {
+                const uData = stats.activeUsers.get(id);
+                const name = uData ? `@${uData.username}` : `ID: ${id}`;
+                vipList += `${index + 1}. ${name} (\`${id}\`)\n`;
+            });
+            bot.sendMessage(chatId, vipList, { parse_mode: 'Markdown' });
             break;
 
         case 'queue':
@@ -238,9 +449,9 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        // Check rate limit
-        if (!checkRateLimit(userId)) {
-            bot.sendMessage(chatId, '⚠️ Bạn đang gửi quá nhanh! Vui lòng đợi 10 giây.', {
+        // VIP users bypass rate limit
+        if (!isVip(userId) && !checkRateLimit(userId)) {
+            bot.sendMessage(chatId, '⚠️ Bạn đang gửi quá nhanh! Vui lòng đợi 10 giây.\n\n💡 Tip: Liên hệ admin để nâng cấp VIP không giới hạn!', {
                 reply_to_message_id: msg.message_id
             }).catch(console.error);
             return;
@@ -261,15 +472,22 @@ bot.on('message', async (msg) => {
             username,
             url: tiktokUrl,
             messageId: msg.message_id,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            isVip: isVip(userId)
         };
 
-        requestQueue.push(queueItem);
+        // VIP users go to front of queue, regular users go to back
+        if (queueItem.isVip) {
+            requestQueue.unshift(queueItem);
+        } else {
+            requestQueue.push(queueItem);
+        }
 
         // Notify user of queue position
-        const position = requestQueue.length;
-        if (position > 1 || processingCount >= MAX_CONCURRENT) {
-            bot.sendMessage(chatId, `📋 Đã thêm vào hàng đợi (vị trí: ${position})`, {
+        const position = requestQueue.indexOf(queueItem) + 1;
+        if (requestQueue.length > 1 || processingCount >= MAX_CONCURRENT) {
+            const vipNote = queueItem.isVip ? ' ⭐ VIP - Ưu tiên cao nhất!' : '';
+            bot.sendMessage(chatId, `📋 Đã thêm vào hàng đợi (vị trí: ${position})${vipNote}`, {
                 reply_to_message_id: msg.message_id
             }).catch(console.error);
         }
@@ -307,52 +525,74 @@ async function processQueue() {
             throw new Error('Could not retrieve video URL');
         }
 
-        console.log(`[${new Date().toISOString()}] Downloading video...`);
+        if (videoData.isTooLarge) {
+            console.log(`[${new Date().toISOString()}] Video is too large (${videoData.sizeMB.toFixed(2)} MB), sending direct link...`);
 
-        // Download video to temporary file
-        const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
-        const tempFilePath = path.join(__dirname, tempFileName);
+            await bot.sendMessage(request.chatId, `⚠️ **Video này quá lớn (${videoData.sizeMB.toFixed(2)} MB)!**\n\nTelegram chỉ cho phép bot tải file tối đa 50MB. Vui lòng bấm vào nút dưới đây để tải trực tiếp video chất lượng cao về điện thoại của bạn 👇`, {
+                reply_to_message_id: request.messageId,
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [[{ text: '🔗 TẢI VIDEO TRỰC TIẾP', url: videoData.url }]]
+                }
+            });
 
-        const writer = fs.createWriteStream(tempFilePath);
-        const videoResponse = await axios.get(videoData.url, {
-            responseType: 'stream',
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.tiktok.com/'
+            if (processingMsg) {
+                bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
             }
-        });
 
-        videoResponse.data.pipe(writer);
+            console.log(`[${new Date().toISOString()}] ✅ Direct link sent successfully!`);
+            stats.successfulDownloads++;
+            saveData();
+        } else {
+            console.log(`[${new Date().toISOString()}] Downloading video...`);
 
-        await new Promise((resolve, reject) => {
-            writer.on('finish', resolve);
-            writer.on('error', reject);
-        });
+            // Download video to temporary file
+            const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.mp4`;
+            const tempFilePath = path.join(__dirname, tempFileName);
 
-        console.log(`[${new Date().toISOString()}] Video downloaded. Uploading to Telegram...`);
+            const writer = fs.createWriteStream(tempFilePath);
+            const videoResponse = await axios.get(videoData.url, {
+                responseType: 'stream',
+                timeout: 60000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Referer': 'https://www.tiktok.com/'
+                }
+            });
 
-        await bot.sendVideo(request.chatId, tempFilePath, {
-            caption: '👑 Admin: @phamtheson',
-            reply_to_message_id: request.messageId,
-            supports_streaming: true
-        });
+            videoResponse.data.pipe(writer);
 
-        fs.unlink(tempFilePath, (err) => {
-            if (err) console.error('Error deleting temp file:', err);
-            else console.log(`[${new Date().toISOString()}] Temp file deleted: ${tempFileName}`);
-        });
+            await new Promise((resolve, reject) => {
+                writer.on('finish', resolve);
+                writer.on('error', reject);
+            });
 
-        if (processingMsg) {
-            bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+            console.log(`[${new Date().toISOString()}] Video downloaded. Uploading to Telegram...`);
+
+            await bot.sendVideo(request.chatId, tempFilePath, {
+                caption: '👑 Admin: @phamtheson\n⭐ Bot tải video không logo',
+                reply_to_message_id: request.messageId,
+                supports_streaming: true
+            });
+
+            fs.unlink(tempFilePath, (err) => {
+                if (err) console.error('Error deleting temp file:', err);
+                else console.log(`[${new Date().toISOString()}] Temp file deleted: ${tempFileName}`);
+            });
+
+            if (processingMsg) {
+                bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+            }
+
+            console.log(`[${new Date().toISOString()}] ✅ Video sent successfully!`);
+            stats.successfulDownloads++;
+            saveData();
         }
-
-        console.log(`[${new Date().toISOString()}] ✅ Video sent successfully!`);
-        stats.successfulDownloads++;
 
     } catch (error) {
         console.error('Error processing TikTok:', error.message);
         stats.failedDownloads++;
+        saveData();
 
         let errorMessage = '❌ Có lỗi xảy ra. ';
 
@@ -431,7 +671,8 @@ async function getVideoNoWatermark(url) {
         async () => {
             console.log('[API 1/5] Trying TikWM API...');
             const response = await axios.post('https://www.tikwm.com/api/', {
-                url: normalizedUrl
+                url: normalizedUrl,
+                hd: 1
             }, {
                 timeout: 20000,
                 headers: {
@@ -441,10 +682,10 @@ async function getVideoNoWatermark(url) {
             });
 
             const data = response.data;
-            if (data.code === 0 && data.data?.play) {
+            if (data.code === 0 && (data.data?.play || data.data?.hdplay)) {
                 console.log('✅ TikWM API success!');
                 return {
-                    url: data.data.play,
+                    url: data.data.hdplay || data.data.play,
                     title: data.data.title || 'TikTok Video',
                     author: data.data.author?.nickname || 'Unknown'
                 };
@@ -569,10 +810,8 @@ async function getVideoNoWatermark(url) {
 
                     console.log(`✅ Video verified! Size: ${fileSizeMB > 0 ? fileSizeMB.toFixed(2) + ' MB' : 'Unknown'}`);
 
-                    if (contentLength > 50 * 1024 * 1024) {
-                        console.error(`❌ Video too large: ${fileSizeMB.toFixed(2)} MB (max 50MB)`);
-                        throw new Error(`Video quá lớn (${fileSizeMB.toFixed(2)}MB). Telegram chỉ hỗ trợ tối đa 50MB.`);
-                    }
+                    result.sizeMB = fileSizeMB;
+                    result.isTooLarge = contentLength > 50 * 1024 * 1024;
 
                     return result;
                 } catch (verifyError) {
@@ -621,3 +860,68 @@ bot.on('polling_error', (error) => {
 bot.on('webhook_error', (error) => {
     console.error('Webhook error:', error.message);
 });
+
+// -----------------------------------------------
+// 🗑️ Auto-Cleanup: Delete leftover temp files every 24 hours
+// -----------------------------------------------
+function cleanupTempFiles() {
+    console.log('[Cleanup] Starting auto-cleanup of temp files...');
+    let deleted = 0;
+    let errors = 0;
+    try {
+        const files = fs.readdirSync(__dirname);
+        files.forEach(file => {
+            if (file.startsWith('temp_') && file.endsWith('.mp4')) {
+                const filePath = path.join(__dirname, file);
+                try {
+                    // Only delete if file is older than 10 minutes (safety check)
+                    const stat = fs.statSync(filePath);
+                    const ageMinutes = (Date.now() - stat.mtimeMs) / 60000;
+                    if (ageMinutes > 10) {
+                        fs.unlinkSync(filePath);
+                        deleted++;
+                        console.log(`[Cleanup] Deleted: ${file}`);
+                    }
+                } catch (e) {
+                    errors++;
+                    console.error(`[Cleanup] Failed to delete ${file}:`, e.message);
+                }
+            }
+        });
+    } catch (e) {
+        console.error('[Cleanup] Error reading directory:', e.message);
+    }
+    console.log(`[Cleanup] Done. Deleted: ${deleted} file(s), Errors: ${errors}`);
+    if (ADMIN_USER_ID && deleted > 0) {
+        bot.sendMessage(ADMIN_USER_ID, `🗑️ *Auto-Cleanup xong!*\n✅ Đã xóa ${deleted} file tạm\n❌ Lỗi: ${errors}`, { parse_mode: 'Markdown' }).catch(() => { });
+    }
+}
+
+// Run cleanup immediately on start, then every 24 hours
+cleanupTempFiles();
+setInterval(cleanupTempFiles, 24 * 60 * 60 * 1000);
+
+// -----------------------------------------------
+// 🕛 Reset hourly stats at midnight every day
+// -----------------------------------------------
+function scheduleMidnightReset() {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0); // next midnight
+    const msUntilMidnight = midnight - now;
+
+    setTimeout(() => {
+        console.log('[Scheduler] Resetting hourly stats for new day.');
+        hourlyStats = new Array(24).fill(0);
+        saveData();
+        // Schedule next reset
+        setInterval(() => {
+            hourlyStats = new Array(24).fill(0);
+            saveData();
+            console.log('[Scheduler] Daily hourly stats reset.');
+        }, 24 * 60 * 60 * 1000);
+    }, msUntilMidnight);
+}
+
+scheduleMidnightReset();
+
