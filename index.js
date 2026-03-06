@@ -256,8 +256,8 @@ function checkRateLimit(userId) {
 // Expanded regex to detect TikTok and Douyin links - covers more formats
 const tiktokRegex = /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|v\/\d+|[\w-]+|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i;
 
-// Regex to detect Facebook video links
-const facebookRegex = /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i;
+// Regex to detect Facebook video links (including share/v/ format)
+const facebookRegex = /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i;
 
 // Helper: Check if user is admin
 function isAdmin(userId) {
@@ -510,15 +510,24 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
             vipUsers.add(addVipId);
             saveData();
             bot.sendMessage(chatId, `⭐ Đã thêm VIP cho user ID: ${addVipId}`);
-            // Notify the user
+            // Notify the VIP user
             bot.sendMessage(addVipId,
                 '🎉 *Chúc mừng!* Bạn đã được nâng cấp lên *VIP*!\n\n' +
                 '⭐ Quyền lợi VIP:\n' +
-                '- Không giới hạn tốc độ gửi link\n' +
-                '- Ưu tiên đầu hàng đợi - không phải đợi lâu\n\n' +
+                '• Không giới hạn tốc độ gửi link\n' +
+                '• Ưu tiên đầu hàng đợi - không phải đợi lâu\n\n' +
                 'Cảm ơn bạn đã ủng hộ bot! 💙',
                 { parse_mode: 'Markdown' }
-            ).catch(() => { });
+            ).catch((err) => {
+                console.error(`[VIP] Cannot notify user ${addVipId}:`, err.message);
+                // Admin: inform delivery failed
+                bot.sendMessage(chatId,
+                    `⚠️ Không thể gửi thông báo cho user \`${addVipId}\`.\n` +
+                    `💡 Lý do: User chưa từng nhắn tin với bot (Telegram hạn chế).\n` +
+                    `→ Hãy nhắn thủ công cho họ biết đã được cấp VIP nhé!`,
+                    { parse_mode: 'Markdown' }
+                ).catch(() => { });
+            });
             break;
         }
 
@@ -536,7 +545,14 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 '⚠️ *Thông báo:* Quyền VIP của bạn đã bị thu hồi.\n' +
                 'Liên hệ admin nếu có thắc mắc.',
                 { parse_mode: 'Markdown' }
-            ).catch(() => { });
+            ).catch((err) => {
+                console.error(`[VIP] Cannot notify user ${removeVipId}:`, err.message);
+                bot.sendMessage(chatId,
+                    `⚠️ Không thể gửi thông báo cho user \`${removeVipId}\`.\n` +
+                    `💡 Hãy nhắn thủ công cho họ biết đã bị thu hồi VIP nhé!`,
+                    { parse_mode: 'Markdown' }
+                ).catch(() => { });
+            });
             break;
         }
 
@@ -865,15 +881,45 @@ async function processQueue() {
 // -----------------------------------------------
 // 🐙 Facebook Video Downloader
 // -----------------------------------------------
+async function normalizeFbUrl(fbUrl) {
+    // Share links (share/v/ share/r/ fb.watch) need to be expanded to get the real URL
+    if (fbUrl.includes('/share/') || fbUrl.includes('fb.watch')) {
+        try {
+            console.log('[FB] Expanding share URL...');
+            const response = await axios.get(fbUrl, {
+                maxRedirects: 10,
+                timeout: 10000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                validateStatus: () => true
+            });
+            const finalUrl = response.request?.res?.responseUrl || response.config?.url || fbUrl;
+            if (finalUrl !== fbUrl) {
+                console.log('[FB] Expanded to:', finalUrl);
+            }
+            // Make sure it's fb URL (not login redirect)
+            if (finalUrl.includes('facebook.com') || finalUrl.includes('fb.com')) {
+                return finalUrl;
+            }
+        } catch (e) {
+            console.log('[FB] URL expansion failed, using original:', fbUrl);
+        }
+    }
+    return fbUrl;
+}
+
 async function downloadFacebookVideo(fbUrl) {
-    console.log(`[FB] Processing URL: ${fbUrl}`);
+    // Expand share links to real video URLs first
+    const realUrl = await normalizeFbUrl(fbUrl);
+    console.log(`[FB] Processing URL: ${realUrl}`);
 
     const apis = [
         // API 1: getfvid.com
         async () => {
             console.log('[FB API 1/3] Trying getfvid.com...');
             const response = await axios.post('https://www.getfvid.com/downloader',
-                new URLSearchParams({ URLz: fbUrl }),
+                new URLSearchParams({ URLz: realUrl }),
                 {
                     timeout: 20000,
                     headers: {
@@ -898,7 +944,7 @@ async function downloadFacebookVideo(fbUrl) {
         async () => {
             console.log('[FB API 2/3] Trying fdown.net...');
             const response = await axios.get('https://fdown.net/download.php', {
-                params: { URLz: fbUrl },
+                params: { URLz: realUrl },
                 timeout: 20000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -918,7 +964,7 @@ async function downloadFacebookVideo(fbUrl) {
         async () => {
             console.log('[FB API 3/3] Trying snapsave.app...');
             const response = await axios.post('https://snapsave.app/action.php',
-                new URLSearchParams({ url: fbUrl }),
+                new URLSearchParams({ url: realUrl }),
                 {
                     timeout: 20000,
                     headers: {
