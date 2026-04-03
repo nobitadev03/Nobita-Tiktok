@@ -39,6 +39,9 @@ let stats = {
 // Banned Users
 let bannedUsers = new Set();
 
+// Muted Users
+let mutedUsers = new Set();
+
 // VIP Users
 let vipUsers = new Set();
 
@@ -71,6 +74,9 @@ function loadData() {
             if (data.bannedUsers) {
                 bannedUsers = new Set(data.bannedUsers);
             }
+            if (data.mutedUsers) {
+                mutedUsers = new Set(data.mutedUsers);
+            }
             if (data.vipUsers) {
                 vipUsers = new Set(data.vipUsers);
             }
@@ -97,6 +103,7 @@ function saveData() {
                 activeUsers: Array.from(stats.activeUsers.entries())
             },
             bannedUsers: Array.from(bannedUsers),
+            mutedUsers: Array.from(mutedUsers),
             vipUsers: Array.from(vipUsers),
             userLimitOverrides: Array.from(userLimitOverrides.entries()),
             hourlyStats
@@ -132,6 +139,7 @@ app.get('/api/stats', (req, res) => {
         totalUsers: stats.activeUsers.size,
         vipUsers: vipUsers.size,
         bannedUsers: bannedUsers.size,
+        mutedUsers: mutedUsers.size,
         queueLength: requestQueue.length,
         processing: processingCount,
         maxConcurrent: MAX_CONCURRENT,
@@ -195,6 +203,26 @@ app.post('/api/admin/unban', requireAdminToken, async (req, res) => {
     bannedUsers.delete(parseInt(userId));
     saveData();
     res.json({ success: true });
+});
+
+app.post('/api/admin/mute', requireAdminToken, async (req, res) => {
+    const { userId } = req.body;
+    const uid = parseInt(userId);
+    if (!uid) return res.status(400).json({ success: false, error: 'Invalid user id' });
+    if (uid === ADMIN_USER_ID) return res.status(400).json({ success: false, error: 'Cannot mute admin' });
+    mutedUsers.add(uid);
+    saveData();
+    bot.sendMessage(uid, '🔇 Bạn đã bị cấm nhắn tin với Admin.').catch(()=>{});
+    res.json({ success: true, message: `Thành công cấm chat ID: ${uid}` });
+});
+
+app.post('/api/admin/unmute', requireAdminToken, async (req, res) => {
+    const { userId } = req.body;
+    const uid = parseInt(userId);
+    mutedUsers.delete(uid);
+    saveData();
+    bot.sendMessage(uid, '🔊 Bạn đã được mở khoá nhắn tin với Admin.').catch(()=>{});
+    res.json({ success: true, message: `Thành công mở khoá chat ID: ${uid}` });
 });
 
 app.post('/api/admin/vip', requireAdminToken, async (req, res) => {
@@ -443,7 +471,7 @@ bot.onText(/^\/(\w+)(.*)/, async (msg, match) => {
                 `🖥️ *Admin Dashboard*\n\n` +
                 `📥 Tổng: ${stats.totalRequests} requests\n` +
                 `✅ Thành công: ${stats.successfulDownloads} (${successRateP}%)\n` +
-                `👥 Users: ${stats.activeUsers.size} | ⭐ VIP: ${vipUsers.size} | 🚫 Banned: ${bannedUsers.size}\n` +
+                `👥 Users: ${stats.activeUsers.size} | ⭐ VIP: ${vipUsers.size} | 🚫 Banned: ${bannedUsers.size} | 🔇 Muted: ${mutedUsers.size}\n` +
                 `📋 Hàng đợi: ${requestQueue.length} | ⚙️ Xử lý: ${processingCount}/${MAX_CONCURRENT}`,
                 {
                     parse_mode: 'Markdown',
@@ -883,7 +911,9 @@ bot.on('message', async (msg) => {
                 }
             } else if (!isAdmin(userId)) {
                 // User sending regular message -> forward to Admin
-                if (ADMIN_USER_ID) {
+                if (mutedUsers.has(userId)) {
+                    bot.sendMessage(chatId, '🔇 Tính năng gửi tin nhắn cho Admin của bạn đã bị khóa.').catch(console.error);
+                } else if (ADMIN_USER_ID) {
                     const usernameInfo = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
                     bot.sendMessage(ADMIN_USER_ID, `📩 *Tin nhắn từ ${usernameInfo}* (ID: \`${userId}\`):\n\n${text}`, { parse_mode: 'Markdown' })
                         .catch(console.error);

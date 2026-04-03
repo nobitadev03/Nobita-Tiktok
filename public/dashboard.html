@@ -95,14 +95,16 @@
 
     <!-- User Management -->
     <div class="control-group">
-      <h4>Quản Lý User (VIP / Cấm)</h4>
+      <h4>Quản Lý User (VIP / Cấm / Cấm Chat)</h4>
       <div class="form-row">
         <input type="text" id="mgr-id" placeholder="User ID">
         <select id="mgr-action" style="width: 140px;">
           <option value="vip_add">Thêm VIP</option>
           <option value="vip_remove">Xóa VIP</option>
-          <option value="ban">Khoá (Ban)</option>
-          <option value="unban">Mở Khóa (Unban)</option>
+          <option value="ban">Khoá Bốt (Ban)</option>
+          <option value="unban">Mở Khóa Bốt (Unban)</option>
+          <option value="mute">Cấm Chat (Mute)</option>
+          <option value="unmute">Mở Chat (Unmute)</option>
         </select>
         <button onclick="manageUser()">Thực Thi</button>
       </div>
@@ -133,7 +135,8 @@
                 <div class="card"><div class="num">${data.successRate}%</div><div class="label">📈 Tỷ Lệ OK</div></div>
                 <div class="card"><div class="num">${data.totalUsers}</div><div class="label">👥 Người Dùng</div></div>
                 <div class="card"><div class="num">${data.vipUsers}</div><div class="label">⭐ VIP Users</div></div>
-                <div class="card"><div class="num">${data.bannedUsers}</div><div class="label">🚫 Bị Cấm</div></div>
+                <div class="card"><div class="num">${data.bannedUsers}</div><div class="label">🚫 Bị Cấm Bốt</div></div>
+                <div class="card"><div class="num">${data.mutedUsers}</div><div class="label">🔇 Bị Cấm Chat</div></div>
                 <div class="card"><div class="num">${data.queueLength}</div><div class="label">📋 Hàng Đợi</div></div>
             `;
 
@@ -236,8 +239,9 @@
         let endpoint = '';
         let payload = { userId };
         
-        if (action === 'ban' || action === 'unban') endpoint = action;
-        else {
+        if (action === 'ban' || action === 'unban' || action === 'mute' || action === 'unmute') {
+            endpoint = action;
+        } else {
             endpoint = 'vip';
             payload.action = action === 'vip_add' ? 'add' : 'remove';
         }
