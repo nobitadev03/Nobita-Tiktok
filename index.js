@@ -112,6 +112,7 @@ loadData();
 // --- Server for Render/Heroku (Keep Alive + Dashboard) ---
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json()); // Enable JSON parsing for API requests
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok', uptime: process.uptime() }));
 
 // API endpoint for stats (secured by token)
@@ -134,8 +135,87 @@ app.get('/api/stats', (req, res) => {
         queueLength: requestQueue.length,
         processing: processingCount,
         maxConcurrent: MAX_CONCURRENT,
-        hourlyStats
+        hourlyStats,
+        maintenanceMode
     });
+});
+
+// Middleware to check admin token
+function requireAdminToken(req, res, next) {
+    const token = req.query.token || req.body.token;
+    if (!process.env.DASHBOARD_TOKEN || token !== process.env.DASHBOARD_TOKEN) {
+        return res.status(401).json({ error: 'Unauthorized', success: false });
+    }
+    next();
+}
+
+// Management APIs
+app.post('/api/admin/broadcast', requireAdminToken, async (req, res) => {
+    const message = req.body.message;
+    if (!message) return res.status(400).json({ success: false, error: 'No message provided' });
+    let sent = 0;
+    res.json({ success: true, message: 'Đang tiến hành gửi broadcast...' });
+    
+    // Process asynchronously with a small delay to avoid hitting Telegram rate limits (429)
+    for (const [uid] of stats.activeUsers) {
+        try {
+            await bot.sendMessage(uid, `📢 *Thông báo từ Admin:*\n\n${message}`, { parse_mode: 'Markdown' });
+            sent++;
+            await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay
+        } catch (e) {
+            console.error(`Failed to broadcast to ${uid}:`, e.message);
+        }
+    }
+    console.log(`Broadcast completed. Sent to ${sent} users.`);
+});
+
+app.post('/api/admin/dm', requireAdminToken, async (req, res) => {
+    const { userId, message } = req.body;
+    if (!userId || !message) return res.status(400).json({ success: false, error: 'Missing parameters' });
+    try {
+        await bot.sendMessage(parseInt(userId), `👨‍💻 *Admin:*\n${message}`, { parse_mode: 'Markdown' });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post('/api/admin/ban', requireAdminToken, async (req, res) => {
+    const { userId } = req.body;
+    const uid = parseInt(userId);
+    if (!uid) return res.status(400).json({ success: false, error: 'Invalid user id' });
+    if (uid === ADMIN_USER_ID) return res.status(400).json({ success: false, error: 'Cannot ban admin' });
+    bannedUsers.add(uid);
+    saveData();
+    res.json({ success: true });
+});
+
+app.post('/api/admin/unban', requireAdminToken, async (req, res) => {
+    const { userId } = req.body;
+    bannedUsers.delete(parseInt(userId));
+    saveData();
+    res.json({ success: true });
+});
+
+app.post('/api/admin/vip', requireAdminToken, async (req, res) => {
+    const { userId, action } = req.body;
+    const uid = parseInt(userId);
+    if (!uid) return res.status(400).json({ success: false, error: 'Invalid user id' });
+    if (action === 'add') {
+        vipUsers.add(uid);
+        bot.sendMessage(uid, '🎉 *Chúc mừng!* Bạn đã được nâng cấp lên *VIP*!\n\n⭐ Quyền lợi VIP:\n• Không giới hạn tốc độ.\n• Ưu tiên tải nhanh nhất.', { parse_mode: 'Markdown' }).catch(()=>{});
+    } else {
+        vipUsers.delete(uid);
+        bot.sendMessage(uid, '⚠️ *Thông báo:* Quyền VIP của bạn đã bị thu hồi.', { parse_mode: 'Markdown' }).catch(()=>{});
+    }
+    saveData();
+    res.json({ success: true });
+});
+
+app.post('/api/admin/maintenance', requireAdminToken, async (req, res) => {
+    const { status } = req.body;
+    maintenanceMode = status === 'on';
+    res.json({ success: true, maintenanceMode });
 });
 
 // Serve dashboard HTML
@@ -759,6 +839,36 @@ bot.on('message', async (msg) => {
 
         // Process queue
         processQueue();
+    } else {
+        // Handle 2-way chat if message is not a command
+        if (!text.startsWith('/')) {
+            if (isAdmin(userId) && msg.reply_to_message) {
+                // Admin replies to a user message
+                let targetId = null;
+                if (msg.reply_to_message.forward_from) {
+                    targetId = msg.reply_to_message.forward_from.id;
+                } else if (msg.reply_to_message.text && msg.reply_to_message.text.includes('ID:')) {
+                    // Fallback to parse ID from text
+                    const idMatch = msg.reply_to_message.text.match(/ID:\s*`?(\d+)`?/);
+                    if (idMatch) targetId = parseInt(idMatch[1]);
+                }
+
+                if (targetId) {
+                    bot.sendMessage(targetId, `👨‍💻 *Admin:*\n${text}`, { parse_mode: 'Markdown' })
+                        .then(() => bot.sendMessage(chatId, '✅ Đã gửi phản hồi!'))
+                        .catch(e => bot.sendMessage(chatId, `❌ Lỗi: ${e.message}`));
+                } else {
+                    bot.sendMessage(chatId, '❌ Không nhận diện được User ID để trả lời.');
+                }
+            } else if (!isAdmin(userId)) {
+                // User sending regular message -> forward to Admin
+                if (ADMIN_USER_ID) {
+                    const usernameInfo = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
+                    bot.sendMessage(ADMIN_USER_ID, `📩 *Tin nhắn từ ${usernameInfo}* (ID: \`${userId}\`):\n\n${text}`, { parse_mode: 'Markdown' })
+                        .catch(console.error);
+                }
+            }
+        }
     }
 });
 
@@ -780,7 +890,11 @@ async function processQueue() {
 
     try {
         // Notify user that we are processing
-        const platformLabel = request.platform === 'facebook' ? '🐙 Facebook' : '🎵 TikTok';
+        let platformLabel = '🎵 TikTok';
+        if (request.platform === 'facebook') platformLabel = '🐙 Facebook';
+        else if (request.platform === 'youtube') platformLabel = '▶️ YouTube';
+        else if (request.platform === 'instagram') platformLabel = '📸 Instagram';
+
         processingMsg = await bot.sendMessage(request.chatId, `⏳ Đang tải video ${platformLabel}...`, {
             reply_to_message_id: request.messageId
         });
@@ -1295,21 +1409,37 @@ function extractVideoId(url) {
 // -----------------------------------------------
 // ▶️ YouTube Video Downloader
 // -----------------------------------------------
-const ytdl = require('ytdl-core');
+const youtubedl = require('youtube-dl-exec');
 async function downloadYouTubeVideo(url) {
     console.log(`[YT] Processing URL: ${url}`);
     try {
-        const info = await ytdl.getInfo(url);
-        if (info.videoDetails.lengthSeconds > 600) {
+        const info = await youtubedl(url, {
+            dumpSingleJson: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            preferFreeFormats: true,
+            youtubeSkipDashManifest: true
+        });
+
+        if (info.duration > 600) {
             throw new Error('Video quá lớn (chỉ hỗ trợ tải video dưới 10 phút)');
         }
-        // Get the best video format that includes both audio and video
-        const format = ytdl.chooseFormat(info.formats, { quality: 'highest', filter: 'audioandvideo' });
-        if (format && format.url) {
+
+        let format = null;
+        if (info.formats) {
+            format = info.formats.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4');
+            if (!format) {
+                format = info.formats.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
+            }
+        }
+        
+        const finalUrl = format ? format.url : info.url;
+
+        if (finalUrl) {
             return {
-                url: format.url,
-                title: info.videoDetails.title,
-                author: 'YouTube',
+                url: finalUrl,
+                title: info.title || 'YouTube Video',
+                author: info.uploader || 'YouTube',
                 sizeMB: 0,
                 isTooLarge: false
             };

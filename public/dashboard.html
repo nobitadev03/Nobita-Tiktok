@@ -17,11 +17,25 @@
   .card:hover { transform:translateY(-3px); border-color:#7c3aed; }
   .card .num { font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
   .card .label { font-size:.8rem; color:#888; margin-top:6px; text-transform:uppercase; letter-spacing:1px; }
-  .chart-section { padding:0 32px 32px; }
-  .chart-card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:24px; }
-  .chart-card h3 { margin-bottom:16px; color:#a78bfa; }
+  .main-content { display: flex; gap: 24px; padding: 0 32px 32px; flex-wrap: wrap; }
+  .section-card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:24px; flex: 1; min-width: 300px; }
+  .section-card h3 { margin-bottom:16px; color:#a78bfa; border-bottom: 1px solid #2a2a4e; padding-bottom: 10px; }
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
   .badge-ok { background:#065f46; color:#6ee7b7; }
+  
+  /* Form Controls */
+  .control-group { margin-bottom: 16px; background: #131323; padding: 16px; border-radius: 8px; border: 1px solid #2a2a4e; }
+  .control-group h4 { margin-bottom: 10px; color: #fff; font-size: 0.95rem; }
+  .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  input, textarea, select { width: 100%; padding: 10px 14px; background: #0f0f1a; border: 1px solid #333; color: #fff; border-radius: 6px; outline: none; }
+  input:focus, textarea:focus { border-color: #7c3aed; }
+  textarea { resize: vertical; min-height: 60px; }
+  button { padding: 10px 16px; background: #7c3aed; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: .2s; white-space: nowrap; }
+  button:hover { background: #6d28d9; }
+  button.danger { background: #e11d48; }
+  button.danger:hover { background: #be123c; }
+  button.success { background: #059669; }
+  button.success:hover { background: #047857; }
 </style>
 </head>
 <body>
@@ -30,28 +44,81 @@
         <span>🤖</span>
         <div>
             <h1>Nobita Bot Dashboard</h1>
-            <div class="subtitle">Tự động làm mới mỗi 30s &nbsp; <span class="badge badge-ok">ONLINE</span></div>
+            <div class="subtitle">Tự động làm mới mỗi 30s &nbsp; <span id="status-badge" class="badge badge-ok">ONLINE</span></div>
         </div>
     </div>
 </div>
 <div class="grid" id="stats-grid">
   <!-- Content will be injected by JS -->
 </div>
-<div class="chart-section">
-  <div class="chart-card">
+
+<div class="main-content">
+  <!-- Chart Section -->
+  <div class="section-card" style="flex: 2; min-width: 500px;">
     <h3>📊 Lượt Tải (24 Giờ Qua)</h3>
-    <canvas id="hourlyChart" height="80"></canvas>
+    <canvas id="hourlyChart" height="100"></canvas>
+  </div>
+
+  <!-- Admin Control Panel -->
+  <div class="section-card">
+    <h3>⚙️ Bảng Điều Khiển Quản Trị</h3>
+    
+    <!-- Maintenance Toggle -->
+    <div class="control-group">
+      <h4>Trạng Thái Bot</h4>
+      <div class="form-row">
+        <button id="btn-maint-off" class="success" onclick="toggleMaintenance('off')">Bật Hoạt Động (ON)</button>
+        <button id="btn-maint-on" class="danger" onclick="toggleMaintenance('on')">Bật Bảo Trì (OFF)</button>
+      </div>
+    </div>
+
+    <!-- Broadcast -->
+    <div class="control-group">
+      <h4>Gửi Thông Báo (Broadcast)</h4>
+      <textarea id="bc-msg" placeholder="Nhập nội dung thông báo cho tất cả users..."></textarea>
+      <div style="margin-top:10px;text-align:right;">
+        <button onclick="sendBroadcast()">🚀 Gửi Broadcast</button>
+      </div>
+    </div>
+
+    <!-- Direct Message -->
+    <div class="control-group">
+      <h4>Gửi Tin Nhắn Riêng (DM)</h4>
+      <div class="form-row">
+        <input type="text" id="dm-id" placeholder="User ID" style="width: 120px;">
+        <input type="text" id="dm-msg" placeholder="Nội dung tin nhắn...">
+      </div>
+      <div style="margin-top:10px;text-align:right;">
+        <button onclick="sendDM()">✉️ Gửi Tin</button>
+      </div>
+    </div>
+
+    <!-- User Management -->
+    <div class="control-group">
+      <h4>Quản Lý User (VIP / Cấm)</h4>
+      <div class="form-row">
+        <input type="text" id="mgr-id" placeholder="User ID">
+        <select id="mgr-action" style="width: 140px;">
+          <option value="vip_add">Thêm VIP</option>
+          <option value="vip_remove">Xóa VIP</option>
+          <option value="ban">Khoá (Ban)</option>
+          <option value="unban">Mở Khóa (Unban)</option>
+        </select>
+        <button onclick="manageUser()">Thực Thi</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <script>
     let myChart = null;
+    const urlParams = new URLSearchParams(window.location.search);
+    const TOKEN = urlParams.get('token');
 
     async function loadStats() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const token = urlParams.get('token');
         try {
-            const res = await fetch('/api/stats?token=' + token);
+            const res = await fetch(`/api/stats?token=${TOKEN}`);
             if (!res.ok) {
                 document.body.innerHTML = '<h1>401 Unauthorized</h1><p>Bạn không có quyền truy cập. Hãy thêm mã ?token=YOUR_TOKEN</p>';
                 return;
@@ -69,6 +136,20 @@
                 <div class="card"><div class="num">${data.bannedUsers}</div><div class="label">🚫 Bị Cấm</div></div>
                 <div class="card"><div class="num">${data.queueLength}</div><div class="label">📋 Hàng Đợi</div></div>
             `;
+
+            // Update Maintenance Status
+            const badge = document.getElementById('status-badge');
+            if (data.maintenanceMode) {
+                badge.className = 'badge badge-danger';
+                badge.style.background = '#e11d48';
+                badge.style.color = '#ffe4e6';
+                badge.innerText = 'BẢO TRÌ (Maint)';
+            } else {
+                badge.className = 'badge badge-ok';
+                badge.style.background = '#065f46';
+                badge.style.color = '#6ee7b7';
+                badge.innerText = 'ONLINE';
+            }
 
             // Draw chart
             const labels = Array.from({length:24},(_, i) => { const h = (new Date().getHours() - 23 + i + 24) % 24; return h + ':00'; });
@@ -101,6 +182,67 @@
         } catch (e) {
             console.error('Lỗi khi lấy dữ liệu:', e);
         }
+    }
+
+    // Helper to send API requests
+    async function callApi(endpoint, bodyData) {
+        bodyData.token = TOKEN; // append token automatically
+        try {
+            const res = await fetch(`/api/admin/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bodyData)
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('✅ Thành công!' + (data.message ? '\\n' + data.message : ''));
+                loadStats(); // refresh data
+            } else {
+                alert('❌ Lỗi: ' + data.error);
+            }
+        } catch(e) {
+            alert('❌ Lỗi hệ thống: ' + e.message);
+        }
+    }
+
+    function sendBroadcast() {
+        const msg = document.getElementById('bc-msg').value;
+        if (!msg) return alert('Vui lòng nhập lời nhắn!');
+        if (confirm('Bạn có chắc chắn muốn gửi thông báo này tới toàn bộ người dùng?')) {
+            callApi('broadcast', { message: msg });
+            document.getElementById('bc-msg').value = '';
+        }
+    }
+
+    function sendDM() {
+        const userId = document.getElementById('dm-id').value;
+        const msg = document.getElementById('dm-msg').value;
+        if (!userId || !msg) return alert('Vui lòng nhập ID và lời nhắn!');
+        callApi('dm', { userId, message: msg });
+        document.getElementById('dm-msg').value = '';
+    }
+
+    function toggleMaintenance(status) {
+        if (confirm(`Bạn có chắc chắn muốn ${status === 'on' ? 'BẬT' : 'TẮT'} bảo trì?`)) {
+            callApi('maintenance', { status });
+        }
+    }
+
+    function manageUser() {
+        const userId = document.getElementById('mgr-id').value;
+        const action = document.getElementById('mgr-action').value;
+        if (!userId) return alert('Vui lòng nhập ID!');
+        
+        let endpoint = '';
+        let payload = { userId };
+        
+        if (action === 'ban' || action === 'unban') endpoint = action;
+        else {
+            endpoint = 'vip';
+            payload.action = action === 'vip_add' ? 'add' : 'remove';
+        }
+        
+        callApi(endpoint, payload);
     }
 
     loadStats();
