@@ -216,6 +216,21 @@ app.post('/api/admin/maintenance', requireAdminToken, async (req, res) => {
     const { status } = req.body;
     maintenanceMode = status === 'on';
     res.json({ success: true, maintenanceMode });
+
+    // Asynchronously notify all users about the maintenance status
+    const message = maintenanceMode 
+        ? "🔧 *Thông báo hệ thống:*\n\nBot hiện đang bảo trì hoặc tiến hành nâng cấp. Các tính năng tải video tạm thời bị ngưng. Vui lòng quay lại sau nhé! Xin lỗi bạn vì sự bất tiện."
+        : "✅ *Thông báo hệ thống:*\n\nQuá trình bảo trì đã hoàn tất! Bot đã hoạt động ổn định và trơn tru trở lại, mời bạn tiếp tục sử dụng.";
+        
+    // Send to all active users with a 50ms delay buffer
+    for (const [uid] of stats.activeUsers) {
+        try {
+            await bot.sendMessage(uid, message, { parse_mode: 'Markdown' });
+            await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay protect
+        } catch (e) {
+            console.error(`Failed to notify maintenance update to ${uid}:`, e.message);
+        }
+    }
 });
 
 // Serve dashboard HTML
@@ -784,6 +799,12 @@ bot.on('message', async (msg) => {
     const platform = tiktokMatch ? 'tiktok' : fbMatch ? 'facebook' : ytMatch ? 'youtube' : igMatch ? 'instagram' : null;
 
     if (match) {
+        // Check maintenance mode immediately
+        if (maintenanceMode && !isVip(userId) && !isAdmin(userId)) {
+            bot.sendMessage(chatId, '🔧 *Bot đang bảo trì!*\n\nCác tính năng tải video tạm thời bị ngưng. Vui lòng quay lại sau nhé!', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id }).catch(console.error);
+            return;
+        }
+
         // Check if user is banned
         if (bannedUsers.has(userId)) {
             bot.sendMessage(chatId, '🚫 Bạn đã bị chặn sử dụng bot này.').catch(console.error);
@@ -898,16 +919,6 @@ async function processQueue() {
         processingMsg = await bot.sendMessage(request.chatId, `⏳ Đang tải video ${platformLabel}...`, {
             reply_to_message_id: request.messageId
         });
-
-        // Check maintenance mode (non-VIP, non-admin)
-        if (maintenanceMode && !isVip(request.userId) && !isAdmin(request.userId)) {
-            if (processingMsg) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
-            bot.sendMessage(request.chatId,
-                '🔧 *Bot đang bảo trì!*\n\nVui lòng quay lại sau. Xin lỗi vì sự bất tiện.',
-                { parse_mode: 'Markdown', reply_to_message_id: request.messageId }
-            ).catch(() => { });
-            return;
-        }
 
         let videoData;
         if (request.platform === 'facebook') {
