@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nobita-tiktok-bot
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+      - key: DASHBOARD_TOKEN
+        sync: false
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "3"
+      - key: NODE_ENV
+        value: production

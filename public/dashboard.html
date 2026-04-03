@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🤖 Nobita Bot Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background:#0f0f1a; color:#e0e0ff; min-height:100vh; }
+  .header { background:linear-gradient(135deg,#1a1a3e,#2d1b69); padding:24px 32px; display:flex; align-items:center; justify-content: space-between; border-bottom:1px solid #333; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size:1.8rem; } .header span { font-size:2rem; }
+  .subtitle { color:#aaa; font-size:.9rem; margin-top:4px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; padding:24px 32px; }
+  .card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:20px; text-align:center; transition:.2s; }
+  .card:hover { transform:translateY(-3px); border-color:#7c3aed; }
+  .card .num { font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .card .label { font-size:.8rem; color:#888; margin-top:6px; text-transform:uppercase; letter-spacing:1px; }
+  .chart-section { padding:0 32px 32px; }
+  .chart-card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:24px; }
+  .chart-card h3 { margin-bottom:16px; color:#a78bfa; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
+  .badge-ok { background:#065f46; color:#6ee7b7; }
+</style>
+</head>
+<body>
+<div class="header">
+    <div class="header-left">
+        <span>🤖</span>
+        <div>
+            <h1>Nobita Bot Dashboard</h1>
+            <div class="subtitle">Tự động làm mới mỗi 30s &nbsp; <span class="badge badge-ok">ONLINE</span></div>
+        </div>
+    </div>
+</div>
+<div class="grid" id="stats-grid">
+  <!-- Content will be injected by JS -->
+</div>
+<div class="chart-section">
+  <div class="chart-card">
+    <h3>📊 Lượt Tải (24 Giờ Qua)</h3>
+    <canvas id="hourlyChart" height="80"></canvas>
+  </div>
+</div>
+
+<script>
+    let myChart = null;
+
+    async function loadStats() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        try {
+            const res = await fetch('/api/stats?token=' + token);
+            if (!res.ok) {
+                document.body.innerHTML = '<h1>401 Unauthorized</h1><p>Bạn không có quyền truy cập. Hãy thêm mã ?token=YOUR_TOKEN</p>';
+                return;
+            }
+            const data = await res.json();
+            
+            // Render basic numbers
+            document.getElementById('stats-grid').innerHTML = `
+                <div class="card"><div class="num">${data.totalRequests}</div><div class="label">📥 Yêu Cầu</div></div>
+                <div class="card"><div class="num">${data.successfulDownloads}</div><div class="label">✅ Thành Công</div></div>
+                <div class="card"><div class="num">${data.failedDownloads}</div><div class="label">❌ Thất Bại</div></div>
+                <div class="card"><div class="num">${data.successRate}%</div><div class="label">📈 Tỷ Lệ OK</div></div>
+                <div class="card"><div class="num">${data.totalUsers}</div><div class="label">👥 Người Dùng</div></div>
+                <div class="card"><div class="num">${data.vipUsers}</div><div class="label">⭐ VIP Users</div></div>
+                <div class="card"><div class="num">${data.bannedUsers}</div><div class="label">🚫 Bị Cấm</div></div>
+                <div class="card"><div class="num">${data.queueLength}</div><div class="label">📋 Hàng Đợi</div></div>
+            `;
+
+            // Draw chart
+            const labels = Array.from({length:24},(_, i) => { const h = (new Date().getHours() - 23 + i + 24) % 24; return h + ':00'; });
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            
+            if(myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type:'line',
+                data:{
+                    labels: labels,
+                    datasets:[{
+                        label:'Số lượt tải',
+                        data: data.hourlyStats,
+                        backgroundColor: 'rgba(124,58,237,0.2)',
+                        borderColor: '#7c3aed',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options:{
+                    responsive:true,
+                    plugins:{ legend:{ display: false } },
+                    scales:{
+                        x:{ ticks:{ color:'#888' }, grid:{ color:'#2a2a4e' } },
+                        y:{ ticks:{ color:'#888' }, grid:{ color:'#2a2a4e' }, beginAtZero: true }
+                    }
+                }
+            });
+        } catch (e) {
+            console.error('Lỗi khi lấy dữ liệu:', e);
+        }
+    }
+
+    loadStats();
+    // Auto-refresh every 30 seconds
+    setInterval(loadStats, 30000);
+</script>
+</body>
+</html>
