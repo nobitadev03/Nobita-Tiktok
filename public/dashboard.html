@@ -1257,10 +1257,10 @@
           <div class="topbar-title">Kiểm duyệt người dùng</div>
         </div>
         <div class="tab-bar">
-          <div class="tab active" onclick="switchTab('mod','ban-tab',this)">🚫 Ban / Mute</div>
-          <div class="tab" onclick="switchTab('mod','vip-tab',this)">⭐ VIP / Premium</div>
-          <div class="tab" onclick="switchTab('mod','warn-tab',this)">⚠️ Cảnh cáo</div>
-          <div class="tab" onclick="switchTab('mod','limit-tab',this)">🚦 Giới hạn</div>
+          <div class="tab active" onclick="switchTab('mod','mod-ban-tab',this)">🚫 Ban / Mute</div>
+          <div class="tab" onclick="switchTab('mod','mod-vip-tab',this)">⭐ VIP / Premium</div>
+          <div class="tab" onclick="switchTab('mod','mod-warn-tab',this)">⚠️ Cảnh cáo</div>
+          <div class="tab" onclick="switchTab('mod','mod-limit-tab',this)">🚦 Giới hạn</div>
         </div>
 
         <div class="tab-content active" id="mod-ban-tab">
@@ -1390,20 +1390,34 @@
           </div>
           <div class="action-card">
             <div class="action-title">🔧 Tính năng on/off</div>
-            <div class="toggle-row"><span class="toggle-label">Auto-xóa tin nhắn đang xử lý</span>
+            <div class="toggle-row"><span class="toggle-label">Chế độ bảo trì</span>
+              <div class="toggle" id="t-maint" onclick="toggleSetting(this,'maintenanceMode')"></div>
+            </div>
+            <div class="toggle-row"><span class="toggle-label">Tự xóa tin nhắn đang xử lý</span>
               <div class="toggle" id="t-autodel" onclick="toggleSetting(this,'autoDeleteProcessing')"></div>
             </div>
             <div class="toggle-row"><span class="toggle-label">Thông báo admin khi lỗi</span>
               <div class="toggle" id="t-notifyadmin" onclick="toggleSetting(this,'notifyAdmin')"></div>
             </div>
+            <div class="toggle-row"><span class="toggle-label">Auto-ban sau 5 lần spam</span>
+              <div class="toggle" id="t-autobanspam" onclick="toggleSetting(this,'autoBanSpam')"></div>
+            </div>
+            <div class="toggle-row"><span class="toggle-label">Hỗ trợ TikTok HD</span>
+              <div class="toggle" id="t-tiktokhd" onclick="toggleSetting(this,'supportTikTokHD')"></div>
+            </div>
+            <div class="toggle-row"><span class="toggle-label">Nút tải MP3</span>
+              <div class="toggle" id="t-mp3button" onclick="toggleSetting(this,'mp3Button')"></div>
+            </div>
           </div>
           <div class="action-card" style="grid-column:1/-1">
             <div class="action-title">🗂️ Dữ liệu & Backup</div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <a id="export-btn" class="btn" onclick="exportData()">📤 Xuất JSON</a>
-              <button class="btn danger"
-                onclick="if(confirm('Xóa toàn bộ temp files?'))toast('Chạy cleanup trên server','warn')">🧹 Cleanup
-                temp</button>
+              <a id="export-btn" class="btn" style="background:var(--bg3);border:1px solid var(--border)" onclick="exportData()">📤 Xuất JSON</a>
+              <button class="btn" style="background:var(--bg3);border:1px solid var(--border)" onclick="document.getElementById('import-file').click()">📥 Nhập backup</button>
+              <input type="file" id="import-file" style="display:none" accept=".json" onchange="importBackupData(this)">
+              <button class="btn" style="border:1px solid rgba(239,68,68,.3);color:var(--red);background:rgba(239,68,68,.05)" onclick="resetSystemStats()">🗑️ Reset thống kê</button>
+              <button class="btn" style="border:1px solid rgba(239,68,68,.3);color:var(--red);background:rgba(239,68,68,.05)" onclick="clearMp3Cache()">🗑️ Xóa MP3 cache</button>
+              <button class="btn" style="border:1px solid rgba(239,68,68,.3);color:var(--red);background:rgba(239,68,68,.05)" onclick="if(confirm('Xóa toàn bộ temp files?'))toast('Chạy cleanup trên server','warn')">🧹 Cleanup temp</button>
             </div>
           </div>
         </div>
@@ -1673,8 +1687,16 @@
       if (data.defaultRateLimit !== undefined) document.getElementById('s-ratelimit').value = data.defaultRateLimit;
       if (data.rateLimitWindow !== undefined) document.getElementById('s-window').value = data.rateLimitWindow;
       if (data.captionText !== undefined) document.getElementById('s-caption').value = data.captionText;
-      setToggle('t-autodel', data.autoDeleteProcessing);
-      setToggle('t-notifyadmin', data.notifyAdmin);
+      
+      const isMaint = document.getElementById('maint-status-text') ? 
+        document.getElementById('maint-status-text').textContent.includes('Đang bảo trì') : false;
+        
+      setToggle('t-maint', data.maintenanceMode !== undefined ? data.maintenanceMode : isMaint);
+      setToggle('t-autodel', data.autoDeleteProcessing !== undefined ? data.autoDeleteProcessing : true);
+      setToggle('t-notifyadmin', data.notifyAdmin !== undefined ? data.notifyAdmin : true);
+      setToggle('t-autobanspam', data.autoBanSpam !== undefined ? data.autoBanSpam : true);
+      setToggle('t-tiktokhd', data.supportTikTokHD !== undefined ? data.supportTikTokHD : true);
+      setToggle('t-mp3button', data.mp3Button !== undefined ? data.mp3Button : true);
     }
 
     function setToggle(id, val) {
@@ -1689,8 +1711,12 @@
         defaultRateLimit: parseInt(document.getElementById('s-ratelimit').value) || 3,
         rateLimitWindow: parseInt(document.getElementById('s-window').value) || 10000,
         captionText: document.getElementById('s-caption').value,
-        autoDeleteProcessing: document.getElementById('t-autodel').classList.contains('on'),
-        notifyAdmin: document.getElementById('t-notifyadmin').classList.contains('on'),
+        maintenanceMode: document.getElementById('t-maint')?.classList.contains('on'),
+        autoDeleteProcessing: document.getElementById('t-autodel')?.classList.contains('on'),
+        notifyAdmin: document.getElementById('t-notifyadmin')?.classList.contains('on'),
+        autoBanSpam: document.getElementById('t-autobanspam')?.classList.contains('on'),
+        supportTikTokHD: document.getElementById('t-tiktokhd')?.classList.contains('on'),
+        mp3Button: document.getElementById('t-mp3button')?.classList.contains('on'),
       };
       const res = await apiFetch('/api/admin/settings', { method: 'POST', body });
       if (res?.success) toast('💾 Cài đặt đã được lưu', 'ok');
@@ -1928,6 +1954,48 @@
 
     async function exportData() {
       window.open(API('/api/admin/export'), '_blank');
+    }
+
+    async function resetSystemStats() {
+      if(!confirm('Bạn có chắc chắn muốn XÓA TOÀN BỘ thống kê? (Không thể hoàn tác)')) return;
+      const res = await apiFetch('/api/admin/resetstats', { method: 'POST', body: {} });
+      if (res?.success) { toast('🗑️ Đã xóa thống kê', 'ok'); loadStats(); }
+      else toast('❌ Lỗi', 'err');
+    }
+
+    async function clearMp3Cache() {
+      if(!confirm('Xóa bộ nhớ đệm MP3 cache?')) return;
+      const res = await apiFetch('/api/admin/clearmp3', { method: 'POST', body: {} });
+      if (res?.success) { toast('🗑️ Đã xóa cache MP3', 'ok'); }
+      else toast('❌ Lỗi', 'err');
+    }
+
+    function importBackupData(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      if (!confirm(`Bạn có chắc muốn ghi đè toàn bộ dữ liệu bằng file "${file.name}"?`)) {
+        input.value = '';
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const json = JSON.parse(e.target.result);
+          toast('⏳ Đang xử lý file...', 'warn');
+          const res = await apiFetch('/api/admin/import', { method: 'POST', body: { data: json } });
+          if(res?.success) {
+            toast('✅ Khôi phục thành công! Tải lại trang...', 'ok');
+            setTimeout(() => location.reload(), 1500);
+          } else {
+            toast('❌ Lỗi: ' + (res?.error || 'Từ chối từ server'), 'err');
+          }
+        } catch(ex) {
+          toast('❌ File JSON không hợp lệ!', 'err');
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
     }
 
     // =====================================================
