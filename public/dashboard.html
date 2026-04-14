@@ -3,255 +3,914 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🤖 Nobita Bot Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>Nobita Bot v3.0 — Admin Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Segoe UI', sans-serif; background:#0f0f1a; color:#e0e0ff; min-height:100vh; }
-  .header { background:linear-gradient(135deg,#1a1a3e,#2d1b69); padding:24px 32px; display:flex; align-items:center; justify-content: space-between; border-bottom:1px solid #333; }
-  .header-left { display: flex; align-items: center; gap: 16px; }
-  .header h1 { font-size:1.8rem; } .header span { font-size:2rem; }
-  .subtitle { color:#aaa; font-size:.9rem; margin-top:4px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; padding:24px 32px; }
-  .card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:20px; text-align:center; transition:.2s; }
-  .card:hover { transform:translateY(-3px); border-color:#7c3aed; }
-  .card .num { font-size:2.2rem; font-weight:700; background:linear-gradient(135deg,#7c3aed,#06b6d4); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-  .card .label { font-size:.8rem; color:#888; margin-top:6px; text-transform:uppercase; letter-spacing:1px; }
-  .main-content { display: flex; gap: 24px; padding: 0 32px 32px; flex-wrap: wrap; }
-  .section-card { background:#1a1a2e; border:1px solid #2a2a4e; border-radius:12px; padding:24px; flex: 1; min-width: 300px; }
-  .section-card h3 { margin-bottom:16px; color:#a78bfa; border-bottom: 1px solid #2a2a4e; padding-bottom: 10px; }
-  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
-  .badge-ok { background:#065f46; color:#6ee7b7; }
-  
-  /* Form Controls */
-  .control-group { margin-bottom: 16px; background: #131323; padding: 16px; border-radius: 8px; border: 1px solid #2a2a4e; }
-  .control-group h4 { margin-bottom: 10px; color: #fff; font-size: 0.95rem; }
-  .form-row { display: flex; gap: 10px; margin-bottom: 10px; }
-  input, textarea, select { width: 100%; padding: 10px 14px; background: #0f0f1a; border: 1px solid #333; color: #fff; border-radius: 6px; outline: none; }
-  input:focus, textarea:focus { border-color: #7c3aed; }
-  textarea { resize: vertical; min-height: 60px; }
-  button { padding: 10px 16px; background: #7c3aed; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: .2s; white-space: nowrap; }
-  button:hover { background: #6d28d9; }
-  button.danger { background: #e11d48; }
-  button.danger:hover { background: #be123c; }
-  button.success { background: #059669; }
-  button.success:hover { background: #047857; }
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--bg2:#161b27;--bg3:#1e2538;--surface:#1a2035;
+  --border:#2a3350;--border2:#3a4a6a;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --blue:#3b82f6;--blue2:#1d4ed8;--green:#22c55e;--amber:#f59e0b;
+  --red:#ef4444;--purple:#a855f7;--cyan:#06b6d4;
+  --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
+.shell{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.logo{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.logo-text{font-weight:600;font-size:14px;color:var(--text)}
+.logo-ver{font-size:10px;color:var(--text3);font-family:var(--mono)}
+nav{flex:1;padding:8px 0;overflow-y:auto}
+.nav-section{padding:14px 14px 4px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--text2);transition:all .15s;border-left:2px solid transparent}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--bg3);color:var(--blue);border-left-color:var(--blue)}
+.nav-icon{width:15px;text-align:center;font-size:13px;flex-shrink:0}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;flex-shrink:0;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sidebar-footer{padding:12px 14px;border-top:1px solid var(--border)}
+.footer-info{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.content{flex:1;overflow-y:auto;overflow-x:hidden;background:var(--bg)}
+.page{display:none}
+.page.active{display:block}
+.topbar{padding:13px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2);position:sticky;top:0;z-index:10}
+.topbar-title{font-size:14px;font-weight:600;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.badge{padding:3px 9px;border-radius:4px;font-size:11px;font-weight:500;font-family:var(--mono)}
+.badge.green{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.badge.red{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.badge.blue{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+.badge.amber{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
+.badge.purple{background:rgba(168,85,247,.12);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
+.badge.gray{background:rgba(100,116,139,.1);color:var(--text3);border:1px solid var(--border)}
+.uptime-badge{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:var(--green);padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--mono)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 22px}
+.metric{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;transition:.2s}
+.metric:hover{border-color:var(--border2)}
+.metric-label{font-size:10px;color:var(--text3);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em}
+.metric-val{font-size:24px;font-weight:600;font-family:var(--mono);color:var(--text)}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:5px}
+.metric-sub.up{color:var(--green)}
+.metric-sub.dn{color:var(--red)}
+.section{padding:0 22px 18px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em}
+.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{padding:9px 13px;text-align:left;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border);background:var(--bg3);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+td{padding:9px 13px;color:var(--text2);border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.015)}
+.user-name{color:var(--text);font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);transition:all .15s;font-family:var(--font)}
+.btn:hover{background:var(--bg);color:var(--text)}
+.btn.sm{padding:3px 8px;font-size:10px}
+.btn.ban{border-color:rgba(239,68,68,.35);color:var(--red);background:rgba(239,68,68,.07)}
+.btn.ban:hover{background:rgba(239,68,68,.16)}
+.btn.vip{border-color:rgba(245,158,11,.35);color:var(--amber);background:rgba(245,158,11,.07)}
+.btn.vip:hover{background:rgba(245,158,11,.16)}
+.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue2)}
+.btn.primary:hover{background:var(--blue2)}
+.btn.danger{background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.35)}
+.btn.danger:hover{background:rgba(239,68,68,.2)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 22px 18px}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+.chart-title{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.bar-chart{display:flex;align-items:flex-end;gap:2px;height:90px}
+.bar{flex:1;border-radius:2px 2px 0 0;opacity:.7;min-height:2px;transition:opacity .2s;cursor:pointer}
+.bar:hover{opacity:1}
+.bar.blue{background:var(--blue)}
+.bar.green{background:var(--green)}
+.bar.amber{background:var(--amber)}
+.platform-list{display:flex;flex-direction:column;gap:8px}
+.platform-row{display:flex;align-items:center;gap:10px}
+.platform-name{font-size:11px;color:var(--text2);width:72px;flex-shrink:0}
+.platform-bar-wrap{flex:1;background:var(--bg3);border-radius:2px;height:6px;overflow:hidden}
+.platform-bar{height:100%;border-radius:2px;transition:width .6s ease}
+.platform-pct{font-size:10px;color:var(--text3);font-family:var(--mono);width:32px;text-align:right;flex-shrink:0}
+.actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 22px}
+.action-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px}
+.action-card:hover{border-color:var(--border2)}
+.action-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.form-group{margin-bottom:11px}
+.form-label{font-size:11px;color:var(--text3);margin-bottom:5px;display:block}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;transition:.15s}
+.form-input:focus{border-color:var(--blue);background:var(--bg)}
+.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:var(--font);resize:vertical;min-height:72px;outline:none;transition:.15s}
+.form-textarea:focus{border-color:var(--blue);background:var(--bg)}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
+.toggle-row:last-child{border-bottom:none}
+.toggle-label{font-size:12px;color:var(--text2)}
+.toggle{width:34px;height:19px;border-radius:10px;position:relative;cursor:pointer;transition:.2s;flex-shrink:0}
+.toggle.on{background:var(--blue)}
+.toggle.off{background:var(--bg3);border:1px solid var(--border2)}
+.toggle::after{content:'';width:13px;height:13px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:.2s}
+.toggle.on::after{left:18px}
+.toggle.off::after{left:3px}
+.queue-item{display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px}
+.queue-item:last-child{border-bottom:none}
+.queue-pos{width:22px;font-family:var(--mono);color:var(--text3);font-size:11px;flex-shrink:0}
+.queue-plat{font-size:15px;flex-shrink:0}
+.queue-user{color:var(--blue);font-weight:500;flex-shrink:0}
+.queue-url{color:var(--text3);font-family:var(--mono);font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:11px 16px;font-size:12px;color:var(--text);z-index:9999;transform:translateY(12px);opacity:0;transition:all .22s;pointer-events:none;max-width:280px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{border-left:3px solid var(--green)}
+.toast.err{border-left:3px solid var(--red)}
+.toast.warn{border-left:3px solid var(--amber)}
+.stat-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.stat-row:last-child{border-bottom:none}
+.stat-key{font-size:12px;color:var(--text3);width:140px;flex-shrink:0}
+.stat-val{font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);padding:0 22px}
+.tab{padding:11px 15px;font-size:12px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab:hover{color:var(--text2)}
+.tab-content{display:none;padding:16px 22px}
+.tab-content.active{display:block}
+.activity-feed{max-height:200px;overflow-y:auto}
+.activity-item{display:flex;align-items:flex-start;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border)}
+.activity-item:last-child{border-bottom:none}
+.activity-dot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.activity-dot.ok{background:var(--green)}
+.activity-dot.err{background:var(--red)}
+.activity-dot.warn{background:var(--amber)}
+.activity-text{font-size:11px;color:var(--text2);flex:1;line-height:1.5}
+.activity-time{font-size:10px;color:var(--text3);font-family:var(--mono);flex-shrink:0}
+.search-wrap{padding:12px 22px 10px}
+.search-input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:9px 13px;color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:.15s}
+.search-input:focus{border-color:var(--blue)}
+.select{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 9px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;cursor:pointer;transition:.15s}
+.select:focus{border-color:var(--blue)}
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
 </style>
 </head>
 <body>
-<div class="header">
-    <div class="header-left">
-        <span>🤖</span>
-        <div>
-            <h1>Nobita Bot Dashboard</h1>
-            <div class="subtitle">Tự động làm mới mỗi 30s &nbsp; <span id="status-badge" class="badge badge-ok">ONLINE</span></div>
+<div class="shell">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">🤖</div>
+    <div>
+      <div class="logo-text">Nobita Bot</div>
+      <div class="logo-ver">v3.0 admin</div>
+    </div>
+  </div>
+  <nav>
+    <div class="nav-section">Main</div>
+    <div class="nav-item active" onclick="gotoPage('overview',this)">
+      <span class="nav-icon">📊</span>Tổng quan<span class="status-dot"></span>
+    </div>
+    <div class="nav-item" onclick="gotoPage('users',this)">
+      <span class="nav-icon">👥</span>Người dùng
+    </div>
+    <div class="nav-item" onclick="gotoPage('queue',this)">
+      <span class="nav-icon">📋</span>Hàng đợi
+    </div>
+    <div class="nav-section">Quản lý</div>
+    <div class="nav-item" onclick="gotoPage('broadcast',this)">
+      <span class="nav-icon">📢</span>Broadcast
+    </div>
+    <div class="nav-item" onclick="gotoPage('moderation',this)">
+      <span class="nav-icon">🛡️</span>Kiểm duyệt
+    </div>
+    <div class="nav-section">Hệ thống</div>
+    <div class="nav-item" onclick="gotoPage('settings',this)">
+      <span class="nav-icon">⚙️</span>Cài đặt
+    </div>
+    <div class="nav-item" onclick="gotoPage('logs',this)">
+      <span class="nav-icon">📝</span>Nhật ký
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="footer-info" id="sidebar-time">--:--:--</div>
+    <div class="footer-info" style="margin-top:3px">Admin: @phamtheson</div>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+<!-- ===== OVERVIEW ===== -->
+<div class="page active" id="page-overview">
+  <div class="topbar">
+    <div class="topbar-title">Tổng quan hệ thống</div>
+    <div class="topbar-right">
+      <span class="uptime-badge" id="uptime-badge">⬤ ONLINE 3d 7h 22m</span>
+      <span class="badge green">Bot hoạt động</span>
+    </div>
+  </div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Tổng requests</div>
+      <div class="metric-val">12,847</div>
+      <div class="metric-sub up">▲ +234 hôm nay</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Tải thành công</div>
+      <div class="metric-val" style="color:var(--green)">11,203</div>
+      <div class="metric-sub up">87.2% tỷ lệ</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Tổng users</div>
+      <div class="metric-val">1,048</div>
+      <div class="metric-sub up">▲ +12 tuần này</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Thất bại</div>
+      <div class="metric-val" style="color:var(--red)">1,644</div>
+      <div class="metric-sub dn">12.8% tỷ lệ lỗi</div>
+    </div>
+  </div>
+  <div class="charts">
+    <div class="chart-card">
+      <div class="chart-title">Hoạt động 24h (requests/giờ)</div>
+      <div class="bar-chart" id="hourly-chart"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Nền tảng phổ biến</div>
+      <div class="platform-list" id="platform-list"></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Hoạt động gần đây</div>
+      <span class="badge blue">● Live</span>
+    </div>
+    <div class="table-wrap">
+      <div class="activity-feed" id="activity-feed"></div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="section-header"><div class="section-title">Trạng thái hệ thống</div></div>
+    <div class="table-wrap" style="padding:12px 16px">
+      <div class="stat-row"><div class="stat-key">Bot version</div><div class="stat-val">3.0</div></div>
+      <div class="stat-row"><div class="stat-key">Platforms hỗ trợ</div><div class="stat-val">9 nền tảng</div></div>
+      <div class="stat-row"><div class="stat-key">Max concurrent</div><div class="stat-val">5</div></div>
+      <div class="stat-row"><div class="stat-key">Max file size</div><div class="stat-val">50 MB</div></div>
+      <div class="stat-row"><div class="stat-key">Rate limit mặc định</div><div class="stat-val">3 req / 10s</div></div>
+      <div class="stat-row"><div class="stat-key">Hàng đợi hiện tại</div><div class="stat-val" id="queue-status">3 chờ / 2 xử lý</div></div>
+      <div class="stat-row"><div class="stat-key">Memory usage</div><div class="stat-val">128.4 MB</div></div>
+      <div class="stat-row"><div class="stat-key">VIP users</div><div class="stat-val" style="color:var(--amber)">8 ⭐</div></div>
+      <div class="stat-row"><div class="stat-key">Premium users</div><div class="stat-val" style="color:var(--purple)">23 💎</div></div>
+      <div class="stat-row"><div class="stat-key">Banned users</div><div class="stat-val" style="color:var(--red)">14 🚫</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== USERS ===== -->
+<div class="page" id="page-users">
+  <div class="topbar">
+    <div class="topbar-title">Quản lý người dùng</div>
+    <div class="topbar-right">
+      <select class="select" id="user-filter" onchange="filterUsers()">
+        <option value="all">Tất cả</option>
+        <option value="vip">VIP ⭐</option>
+        <option value="premium">Premium 💎</option>
+        <option value="banned">Đã ban 🚫</option>
+        <option value="warned">Có cảnh cáo ⚠️</option>
+      </select>
+      <span class="badge blue" id="user-count-badge">10 users</span>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <input class="search-input" placeholder="🔍  Tìm theo tên hoặc User ID..." id="user-search" oninput="filterUsers()">
+  </div>
+  <div class="section" style="padding-top:0">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Người dùng</th>
+            <th>User ID</th>
+            <th>Lượt tải</th>
+            <th>Lần cuối</th>
+            <th>Cấp bậc</th>
+            <th>Cảnh cáo</th>
+            <th>Hành động</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== QUEUE ===== -->
+<div class="page" id="page-queue">
+  <div class="topbar">
+    <div class="topbar-title">Hàng đợi xử lý</div>
+    <div class="topbar-right">
+      <span class="badge amber" id="queue-badge">3 chờ</span>
+      <button class="btn danger" onclick="clearQueue()">🗑️ Xóa hàng đợi</button>
+    </div>
+  </div>
+  <div style="padding:16px 22px 8px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div class="metric"><div class="metric-label">Đang xử lý</div><div class="metric-val" style="color:var(--blue)">2 / 5</div></div>
+      <div class="metric"><div class="metric-label">Đang chờ</div><div class="metric-val" style="color:var(--amber)" id="queue-waiting">3</div></div>
+      <div class="metric"><div class="metric-label">Hoàn thành</div><div class="metric-val" style="color:var(--green)">11,203</div></div>
+    </div>
+    <div class="table-wrap" id="queue-list"></div>
+  </div>
+</div>
+
+<!-- ===== BROADCAST ===== -->
+<div class="page" id="page-broadcast">
+  <div class="topbar">
+    <div class="topbar-title">Gửi thông báo</div>
+  </div>
+  <div class="actions-grid" style="padding:16px 22px">
+    <div class="action-card" style="grid-column:1/-1">
+      <div class="action-title">📢 Broadcast tin nhắn</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Đối tượng nhận</label>
+          <select class="select" style="width:100%" id="bc-target">
+            <option value="all">📣 Tất cả người dùng (1,048)</option>
+            <option value="vip">⭐ Chỉ VIP (8 users)</option>
+            <option value="premium">💎 Chỉ Premium (23 users)</option>
+          </select>
         </div>
-    </div>
-</div>
-<div class="grid" id="stats-grid">
-  <!-- Content will be injected by JS -->
-</div>
-
-<div class="main-content">
-  <!-- Chart Section -->
-  <div class="section-card" style="flex: 2; min-width: 500px;">
-    <h3>📊 Lượt Tải (24 Giờ Qua)</h3>
-    <canvas id="hourlyChart" height="100"></canvas>
-  </div>
-
-  <!-- Admin Control Panel -->
-  <div class="section-card">
-    <h3>⚙️ Bảng Điều Khiển Quản Trị</h3>
-    
-    <!-- Maintenance Toggle -->
-    <div class="control-group">
-      <h4>Trạng Thái Bot</h4>
-      <div class="form-row">
-        <button id="btn-maint-off" class="success" onclick="toggleMaintenance('off')">Bật Hoạt Động (ON)</button>
-        <button id="btn-maint-on" class="danger" onclick="toggleMaintenance('on')">Bật Bảo Trì (OFF)</button>
+        <div class="form-group">
+          <label class="form-label">Loại thông báo</label>
+          <select class="select" style="width:100%" id="bc-type">
+            <option value="broadcast">📢 Thông báo thường</option>
+            <option value="announce">📌 Thông báo quan trọng</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nội dung (hỗ trợ *bold* _italic_ `code`)</label>
+        <textarea class="form-textarea" id="bc-msg" style="min-height:90px" placeholder="Nhập nội dung thông báo..."></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn" onclick="document.getElementById('bc-msg').value=''">Xóa</button>
+        <button class="btn primary" onclick="sendBroadcast()">📢 Gửi ngay</button>
       </div>
     </div>
-
-    <!-- Broadcast -->
-    <div class="control-group">
-      <h4>Gửi Thông Báo (Broadcast)</h4>
-      <textarea id="bc-msg" placeholder="Nhập nội dung thông báo cho tất cả users..."></textarea>
-      <div style="margin-top:10px;text-align:right;">
-        <button onclick="sendBroadcast()">🚀 Gửi Broadcast</button>
+    <div class="action-card">
+      <div class="action-title">💬 Nhắn tin trực tiếp</div>
+      <div class="form-group">
+        <label class="form-label">User ID hoặc username</label>
+        <input class="form-input" id="dm-uid" placeholder="123456789">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nội dung</label>
+        <textarea class="form-textarea" id="dm-msg" style="min-height:100px" placeholder="Nhập tin nhắn..."></textarea>
+      </div>
+      <button class="btn primary" onclick="sendDM()" style="width:100%">💬 Gửi DM</button>
+    </div>
+    <div class="action-card">
+      <div class="action-title">⏱️ Thông báo bảo trì</div>
+      <div class="form-group">
+        <label class="form-label">Nội dung bảo trì</label>
+        <textarea class="form-textarea" id="maint-msg" style="min-height:60px" placeholder="Bot đang bảo trì, vui lòng quay lại sau..."></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn danger" onclick="doMaintenance('on')" style="width:100%">🔧 Bật bảo trì</button>
+        <button class="btn primary" onclick="doMaintenance('off')" style="width:100%">✅ Tắt bảo trì</button>
       </div>
     </div>
-
-    <!-- Direct Message -->
-    <div class="control-group">
-      <h4>Gửi Tin Nhắn Riêng (DM)</h4>
-      <div class="form-row">
-        <input type="text" id="dm-id" placeholder="User ID" style="width: 120px;">
-        <input type="text" id="dm-msg" placeholder="Nội dung tin nhắn...">
-      </div>
-      <div style="margin-top:10px;text-align:right;">
-        <button onclick="sendDM()">✉️ Gửi Tin</button>
-      </div>
-    </div>
-
-    <!-- User Management -->
-    <div class="control-group">
-      <h4>Quản Lý User (VIP / Cấm / Cấm Chat)</h4>
-      <div class="form-row">
-        <input type="text" id="mgr-id" placeholder="User ID">
-        <select id="mgr-action" style="width: 140px;">
-          <option value="vip_add">Thêm VIP</option>
-          <option value="vip_remove">Xóa VIP</option>
-          <option value="ban">Khoá Bốt (Ban)</option>
-          <option value="unban">Mở Khóa Bốt (Unban)</option>
-          <option value="mute">Cấm Chat (Mute)</option>
-          <option value="unmute">Mở Chat (Unmute)</option>
-        </select>
-        <button onclick="manageUser()">Thực Thi</button>
-      </div>
-    </div>
-
   </div>
 </div>
+
+<!-- ===== MODERATION ===== -->
+<div class="page" id="page-moderation">
+  <div class="topbar">
+    <div class="topbar-title">Kiểm duyệt người dùng</div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('mod','ban-tab',this)">🚫 Ban / Mute</div>
+    <div class="tab" onclick="switchTab('mod','vip-tab',this)">⭐ VIP / Premium</div>
+    <div class="tab" onclick="switchTab('mod','warn-tab',this)">⚠️ Cảnh cáo</div>
+    <div class="tab" onclick="switchTab('mod','limit-tab',this)">🚦 Giới hạn</div>
+  </div>
+
+  <div class="tab-content active" id="mod-ban-tab">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="action-card">
+        <div class="action-title">🚫 Ban người dùng</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="ban-uid" placeholder="123456789"></div>
+        <div class="form-group"><label class="form-label">Lý do ban</label><input class="form-input" id="ban-reason" placeholder="Vi phạm quy định..."></div>
+        <button class="btn ban" onclick="doAction('ban')" style="width:100%">🚫 Ban ngay</button>
+      </div>
+      <div class="action-card">
+        <div class="action-title">✅ Gỡ ban / Mute</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="unban-uid" placeholder="123456789"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button class="btn primary" onclick="doAction('unban')" style="width:100%">✅ Unban</button>
+          <button class="btn" onclick="doAction('mute')" style="width:100%">🔇 Mute</button>
+        </div>
+        <button class="btn" onclick="doAction('unmute')" style="width:100%">🔊 Unmute</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="mod-vip-tab">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="action-card">
+        <div class="action-title">⭐ Cấp / Thu hồi VIP</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="vip-uid" placeholder="123456789"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <button class="btn vip" onclick="doAction('addvip')" style="width:100%">⭐ Cấp VIP</button>
+          <button class="btn" onclick="doAction('removevip')" style="width:100%">Xóa VIP</button>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg3);border-radius:5px;font-size:11px;color:var(--text3)">
+          VIP: không giới hạn tốc độ, ưu tiên hàng đầu
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-title">💎 Cấp / Thu hồi Premium</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="prem-uid" placeholder="123456789"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <button class="btn" style="border-color:rgba(168,85,247,.35);color:var(--purple);background:rgba(168,85,247,.07);width:100%" onclick="doAction('addprem')">💎 Cấp Premium</button>
+          <button class="btn" onclick="doAction('remprem')" style="width:100%">Xóa Premium</button>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg3);border-radius:5px;font-size:11px;color:var(--text3)">
+          Premium: giới hạn 6 req/10s, ưu tiên hàng đợi
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="mod-warn-tab">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="action-card">
+        <div class="action-title">⚠️ Cảnh cáo người dùng</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="warn-uid" placeholder="123456789"></div>
+        <div class="form-group"><label class="form-label">Lý do cảnh cáo</label><input class="form-input" id="warn-reason" placeholder="Vi phạm quy định..."></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn" style="border-color:rgba(245,158,11,.35);color:var(--amber);background:rgba(245,158,11,.07);width:100%" onclick="doAction('warn')">⚠️ Cảnh cáo</button>
+          <button class="btn" onclick="doAction('clearwarn')" style="width:100%">Xóa cảnh cáo</button>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg3);border-radius:5px;font-size:11px;color:var(--text3)">
+          Auto-ban sau 3 cảnh cáo (hoặc 5 lần spam)
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-title">⏱️ Chế độ chậm (Slow mode)</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="slow-uid" placeholder="123456789"></div>
+        <div class="form-group"><label class="form-label">Delay giữa mỗi request (giây)</label><input class="form-input" id="slow-delay" placeholder="30" type="number" min="1" max="3600"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn" onclick="doAction('slowmode')" style="width:100%">⏱️ Bật chậm</button>
+          <button class="btn" onclick="doAction('clearslowmode')" style="width:100%">Tắt chậm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-content" id="mod-limit-tab">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="action-card">
+        <div class="action-title">🚦 Giới hạn tùy chỉnh</div>
+        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="limit-uid" placeholder="123456789"></div>
+        <div class="form-group"><label class="form-label">Số requests / 10s (0 = chặn hoàn toàn)</label><input class="form-input" id="limit-val" placeholder="Mặc định: 3" type="number" min="0" max="100"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <button class="btn primary" onclick="doAction('setlimit')" style="width:100%">Áp dụng</button>
+          <button class="btn" onclick="doAction('resetlimit')" style="width:100%">Reset</button>
+        </div>
+      </div>
+      <div class="action-card">
+        <div class="action-title">📋 Danh sách giới hạn hiện tại</div>
+        <div style="font-size:12px;color:var(--text3);padding:8px 0">
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">@spammer_user</span><span class="badge red">🚫 CHẶN</span></div>
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">@pham_thu_d</span><span class="badge amber">1 / 10s</span></div>
+          <div style="padding:6px 0;color:var(--text3);font-size:11px">Thêm giới hạn bằng form bên trái</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SETTINGS ===== -->
+<div class="page" id="page-settings">
+  <div class="topbar">
+    <div class="topbar-title">Cài đặt hệ thống</div>
+    <div class="topbar-right">
+      <button class="btn primary" onclick="saveSettings()">💾 Lưu cài đặt</button>
+    </div>
+  </div>
+  <div style="padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div class="action-card">
+      <div class="action-title">⚙️ Thông số bot</div>
+      <div class="form-group"><label class="form-label">Max file size (MB)</label><input class="form-input" value="50" id="s-maxsize" type="number"></div>
+      <div class="form-group"><label class="form-label">Rate limit mặc định (req/10s)</label><input class="form-input" value="3" id="s-ratelimit" type="number"></div>
+      <div class="form-group"><label class="form-label">Rate limit window (ms)</label><input class="form-input" value="10000" id="s-window" type="number"></div>
+      <div class="form-group"><label class="form-label">Caption video gửi</label>
+        <textarea class="form-textarea" id="s-caption" style="min-height:55px">👑 Admin: @phamtheson
+⭐ Bot tải video không logo</textarea>
+      </div>
+    </div>
+    <div class="action-card">
+      <div class="action-title">🔧 Tính năng on/off</div>
+      <div class="toggle-row"><span class="toggle-label">Chế độ bảo trì</span><div class="toggle off" id="t-maintenance" onclick="toggleSetting(this,'maintenance')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Tự xóa tin nhắn đang xử lý</span><div class="toggle on" id="t-autodel" onclick="toggleSetting(this,'autodel')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Thông báo admin khi lỗi</span><div class="toggle on" id="t-notifyadmin" onclick="toggleSetting(this,'notifyadmin')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Auto-ban sau 5 lần spam</span><div class="toggle on" id="t-autoban" onclick="toggleSetting(this,'autoban')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Hỗ trợ TikTok HD</span><div class="toggle on" id="t-tkhd" onclick="toggleSetting(this,'tkhd')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Nút tải MP3</span><div class="toggle on" id="t-mp3btn" onclick="toggleSetting(this,'mp3btn')"></div></div>
+    </div>
+    <div class="action-card" style="grid-column:1/-1">
+      <div class="action-title">🗂️ Dữ liệu & Backup</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="toast('Đang xuất nobita_export.json...','ok')">📤 Xuất JSON</button>
+        <button class="btn" onclick="toast('Tính năng nhập đang phát triển','warn')">📥 Nhập backup</button>
+        <button class="btn danger" onclick="if(confirm('Reset toàn bộ thống kê?'))toast('Đã reset thống kê','ok')">🗑️ Reset thống kê</button>
+        <button class="btn danger" onclick="if(confirm('Xóa toàn bộ cache MP3?'))toast('Đã xóa MP3 cache (500 entries)','ok')">🗑️ Xóa MP3 cache</button>
+        <button class="btn danger" onclick="if(confirm('Xóa tất cả file temp?'))toast('Đã dọn dẹp temp files','ok')">🧹 Cleanup temp</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LOGS ===== -->
+<div class="page" id="page-logs">
+  <div class="topbar">
+    <div class="topbar-title">Nhật ký hệ thống</div>
+    <div class="topbar-right">
+      <select class="select" id="log-filter" onchange="filterLogs()">
+        <option value="all">Tất cả</option>
+        <option value="ok">✅ Thành công</option>
+        <option value="err">❌ Lỗi</option>
+        <option value="warn">⚠️ Cảnh báo</option>
+      </select>
+      <button class="btn" onclick="refreshLogs()">↻ Làm mới</button>
+      <span class="badge blue">● Live</span>
+    </div>
+  </div>
+  <div style="padding:16px 22px">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Thời gian</th>
+            <th>Loại</th>
+            <th>Nền tảng</th>
+            <th>Người dùng</th>
+            <th>Chi tiết</th>
+          </tr>
+        </thead>
+        <tbody id="logs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- end .content -->
+</div><!-- end .shell -->
+
+<div class="toast" id="toast"></div>
 
 <script>
-    let myChart = null;
-    const urlParams = new URLSearchParams(window.location.search);
-    const TOKEN = urlParams.get('token');
+// =========================================================
+// DATA
+// =========================================================
+const USERS=[
+  {id:'7823401',name:'nguyen_van_a',count:342,tier:'vip',warns:0,banned:false,last:'14:23'},
+  {id:'5512809',name:'tran_thi_b',count:218,tier:'premium',warns:1,banned:false,last:'14:22'},
+  {id:'9901234',name:'le_van_c',count:156,tier:'',warns:0,banned:false,last:'14:22'},
+  {id:'4421567',name:'pham_thu_d',count:98,tier:'',warns:2,banned:false,last:'13:45'},
+  {id:'3310928',name:'hoang_van_e',count:77,tier:'premium',warns:0,banned:false,last:'13:30'},
+  {id:'1123456',name:'spammer_user',count:34,tier:'',warns:3,banned:true,last:'12:10'},
+  {id:'8834521',name:'minh_hung',count:201,tier:'vip',warns:0,banned:false,last:'14:21'},
+  {id:'6612398',name:'thu_hien',count:145,tier:'premium',warns:0,banned:false,last:'14:20'},
+  {id:'2298471',name:'duc_anh',count:89,tier:'',warns:1,banned:false,last:'14:18'},
+  {id:'5567812',name:'mai_linh',count:67,tier:'',warns:0,banned:false,last:'14:15'},
+];
 
-    async function loadStats() {
-        try {
-            const res = await fetch(`/api/stats?token=${TOKEN}`);
-            if (!res.ok) {
-                document.body.innerHTML = '<h1>401 Unauthorized</h1><p>Bạn không có quyền truy cập. Hãy thêm mã ?token=YOUR_TOKEN</p>';
-                return;
-            }
-            const data = await res.json();
-            
-            // Render basic numbers
-            document.getElementById('stats-grid').innerHTML = `
-                <div class="card"><div class="num">${data.totalRequests}</div><div class="label">📥 Yêu Cầu</div></div>
-                <div class="card"><div class="num">${data.successfulDownloads}</div><div class="label">✅ Thành Công</div></div>
-                <div class="card"><div class="num">${data.failedDownloads}</div><div class="label">❌ Thất Bại</div></div>
-                <div class="card"><div class="num">${data.successRate}%</div><div class="label">📈 Tỷ Lệ OK</div></div>
-                <div class="card"><div class="num">${data.totalUsers}</div><div class="label">👥 Người Dùng</div></div>
-                <div class="card"><div class="num">${data.vipUsers}</div><div class="label">⭐ VIP Users</div></div>
-                <div class="card"><div class="num">${data.bannedUsers}</div><div class="label">🚫 Bị Cấm Bốt</div></div>
-                <div class="card"><div class="num">${data.mutedUsers}</div><div class="label">🔇 Bị Cấm Chat</div></div>
-                <div class="card"><div class="num">${data.queueLength}</div><div class="label">📋 Hàng Đợi</div></div>
-            `;
+const HOURLY=[12,8,5,3,2,4,9,18,22,31,28,35,40,38,42,39,45,50,47,52,48,44,38,29];
+const PLATFORMS=[
+  {name:'TikTok',pct:52,color:'#3b82f6'},
+  {name:'Facebook',pct:21,color:'#a855f7'},
+  {name:'YouTube',pct:12,color:'#ef4444'},
+  {name:'Instagram',pct:8,color:'#f59e0b'},
+  {name:'Khác',pct:7,color:'#6b7280'},
+];
+const QUEUE_DATA=[
+  {pos:1,plat:'🎵',name:'minh_hung',url:'https://vm.tiktok.com/ZMhAbc123/',tier:'VIP'},
+  {pos:2,plat:'🐙',name:'thu_hien',url:'https://fb.watch/xyz789012/',tier:'Premium'},
+  {pos:3,plat:'📸',name:'le_van_c',url:'https://instagram.com/reel/def456ghi/',tier:''},
+];
+let LOGS_DATA=[
+  {time:'14:23:11',type:'ok',platform:'TikTok',user:'nguyen_van_a',detail:'Video tải thành công (12.4 MB)'},
+  {time:'14:22:58',type:'ok',platform:'Facebook',user:'tran_thi_b',detail:'Reel tải thành công (8.1 MB)'},
+  {time:'14:22:34',type:'err',platform:'YouTube',user:'le_van_c',detail:'Lỗi: Video bị giới hạn khu vực'},
+  {time:'14:21:55',type:'warn',platform:'TikTok',user:'spammer_user',detail:'Rate limit vượt ngưỡng — 5 lần vi phạm'},
+  {time:'14:21:20',type:'ok',platform:'Instagram',user:'minh_hung',detail:'Reel tải thành công (5.7 MB)'},
+  {time:'14:20:45',type:'err',platform:'Twitter',user:'duc_anh',detail:'Lỗi: Video đã bị xóa'},
+  {time:'14:20:12',type:'ok',platform:'Reddit',user:'thu_hien',detail:'Video tải thành công (22.1 MB)'},
+  {time:'14:19:33',type:'warn',platform:'Facebook',user:'pham_thu_d',detail:'Cảnh báo: File gần giới hạn 50 MB'},
+  {time:'14:18:51',type:'ok',platform:'TikTok',user:'mai_linh',detail:'Video HD tải thành công'},
+  {time:'14:18:02',type:'ok',platform:'Bilibili',user:'hoang_van_e',detail:'Video tải thành công (18.3 MB)'},
+];
+let ACTIVITIES=[
+  {type:'ok',text:'@nguyen_van_a tải TikTok thành công (12.4 MB)',time:'14:23'},
+  {type:'ok',text:'@tran_thi_b tải Facebook Reel thành công',time:'14:22'},
+  {type:'err',text:'YouTube lỗi: khu vực bị giới hạn — @le_van_c',time:'14:22'},
+  {type:'warn',text:'Spam detected: @spammer_user (5 lần vi phạm)',time:'14:21'},
+  {type:'ok',text:'@minh_hung tải Instagram Reel thành công',time:'14:21'},
+  {type:'ok',text:'@thu_hien tải Reddit video thành công',time:'14:20'},
+  {type:'warn',text:'File gần giới hạn 50MB — @pham_thu_d',time:'14:19'},
+];
 
-            // Update Maintenance Status
-            const badge = document.getElementById('status-badge');
-            if (data.maintenanceMode) {
-                badge.className = 'badge badge-danger';
-                badge.style.background = '#e11d48';
-                badge.style.color = '#ffe4e6';
-                badge.innerText = 'BẢO TRÌ (Maint)';
-            } else {
-                badge.className = 'badge badge-ok';
-                badge.style.background = '#065f46';
-                badge.style.color = '#6ee7b7';
-                badge.innerText = 'ONLINE';
-            }
+// =========================================================
+// BUILD UI
+// =========================================================
+function buildHourlyChart(){
+  const c=document.getElementById('hourly-chart');
+  if(!c)return;
+  const max=Math.max(...HOURLY);
+  const now=new Date().getHours();
+  c.innerHTML=HOURLY.map((v,i)=>{
+    const h=Math.round((v/max)*100);
+    const cls=i===now?'bar amber':i<now?'bar blue':'bar green';
+    return `<div class="${cls}" style="height:${h}%" title="${i}:00 — ${v} requests"></div>`;
+  }).join('');
+}
 
-            // Draw chart
-            const labels = Array.from({length:24},(_, i) => { const h = (new Date().getHours() - 23 + i + 24) % 24; return h + ':00'; });
-            const ctx = document.getElementById('hourlyChart').getContext('2d');
-            
-            if(myChart) myChart.destroy();
-            myChart = new Chart(ctx, {
-                type:'line',
-                data:{
-                    labels: labels,
-                    datasets:[{
-                        label:'Số lượt tải',
-                        data: data.hourlyStats,
-                        backgroundColor: 'rgba(124,58,237,0.2)',
-                        borderColor: '#7c3aed',
-                        borderWidth: 2,
-                        tension: 0.3,
-                        fill: true
-                    }]
-                },
-                options:{
-                    responsive:true,
-                    plugins:{ legend:{ display: false } },
-                    scales:{
-                        x:{ ticks:{ color:'#888' }, grid:{ color:'#2a2a4e' } },
-                        y:{ ticks:{ color:'#888' }, grid:{ color:'#2a2a4e' }, beginAtZero: true }
-                    }
-                }
-            });
-        } catch (e) {
-            console.error('Lỗi khi lấy dữ liệu:', e);
-        }
-    }
+function buildPlatformList(){
+  const c=document.getElementById('platform-list');
+  if(!c)return;
+  c.innerHTML=PLATFORMS.map(p=>`
+    <div class="platform-row">
+      <span class="platform-name">${p.name}</span>
+      <div class="platform-bar-wrap"><div class="platform-bar" style="width:${p.pct}%;background:${p.color}"></div></div>
+      <span class="platform-pct">${p.pct}%</span>
+    </div>`).join('');
+}
 
-    // Helper to send API requests
-    async function callApi(endpoint, bodyData) {
-        bodyData.token = TOKEN; // append token automatically
-        try {
-            const res = await fetch(`/api/admin/${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(bodyData)
-            });
-            const data = await res.json();
-            if (data.success) {
-                alert('✅ Thành công!' + (data.message ? '\\n' + data.message : ''));
-                loadStats(); // refresh data
-            } else {
-                alert('❌ Lỗi: ' + data.error);
-            }
-        } catch(e) {
-            alert('❌ Lỗi hệ thống: ' + e.message);
-        }
-    }
+function buildActivityFeed(){
+  const c=document.getElementById('activity-feed');
+  if(!c)return;
+  c.innerHTML=ACTIVITIES.map(a=>`
+    <div class="activity-item">
+      <div class="activity-dot ${a.type}"></div>
+      <span class="activity-text">${a.text}</span>
+      <span class="activity-time">${a.time}</span>
+    </div>`).join('');
+}
 
-    function sendBroadcast() {
-        const msg = document.getElementById('bc-msg').value;
-        if (!msg) return alert('Vui lòng nhập lời nhắn!');
-        if (confirm('Bạn có chắc chắn muốn gửi thông báo này tới toàn bộ người dùng?')) {
-            callApi('broadcast', { message: msg });
-            document.getElementById('bc-msg').value = '';
-        }
-    }
+function buildUsersTable(data){
+  const t=document.getElementById('users-tbody');
+  if(!t)return;
+  const tierBadge=(tier,warns,banned)=>{
+    if(banned)return '<span class="badge red">🚫 Ban</span>';
+    if(tier==='vip')return '<span class="badge amber">⭐ VIP</span>';
+    if(tier==='premium')return '<span class="badge purple">💎 Premium</span>';
+    if(warns>=3)return '<span class="badge red">⚠️ Nguy hiểm</span>';
+    return '<span class="badge gray">User</span>';
+  };
+  const warnBadge=w=>w>0?`<span style="color:var(--amber);font-weight:500">${w} / 3</span>`:'<span style="color:var(--text3)">—</span>';
+  t.innerHTML=data.map((u,i)=>`
+    <tr>
+      <td style="color:var(--text3);font-family:var(--mono)">${i+1}</td>
+      <td><span class="user-name">@${u.name}</span></td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${u.id}</td>
+      <td style="font-family:var(--mono)">${u.count.toLocaleString()}</td>
+      <td style="font-size:11px;color:var(--text3)">${u.last}</td>
+      <td>${tierBadge(u.tier,u.warns,u.banned)}</td>
+      <td>${warnBadge(u.warns)}</td>
+      <td><div style="display:flex;gap:5px">
+        <button class="btn sm vip" onclick="quickVip('${u.id}','${u.name}')">⭐</button>
+        <button class="btn sm ban" onclick="quickBan('${u.id}','${u.name}','${u.banned}')">${u.banned?'Unban':'Ban'}</button>
+      </div></td>
+    </tr>`).join('');
+}
 
-    function sendDM() {
-        const userId = document.getElementById('dm-id').value;
-        const msg = document.getElementById('dm-msg').value;
-        if (!userId || !msg) return alert('Vui lòng nhập ID và lời nhắn!');
-        callApi('dm', { userId, message: msg });
-        document.getElementById('dm-msg').value = '';
-    }
+function filterUsers(){
+  const filter=document.getElementById('user-filter').value;
+  const search=document.getElementById('user-search').value.toLowerCase().trim();
+  const data=USERS.filter(u=>{
+    const match=!search||u.name.toLowerCase().includes(search)||u.id.includes(search);
+    if(!match)return false;
+    if(filter==='vip')return u.tier==='vip';
+    if(filter==='premium')return u.tier==='premium';
+    if(filter==='banned')return u.banned;
+    if(filter==='warned')return u.warns>0;
+    return true;
+  });
+  buildUsersTable(data);
+  document.getElementById('user-count-badge').textContent=data.length+' users';
+}
 
-    function toggleMaintenance(status) {
-        if (confirm(`Bạn có chắc chắn muốn ${status === 'on' ? 'BẬT' : 'TẮT'} bảo trì?`)) {
-            callApi('maintenance', { status });
-        }
-    }
+function buildQueue(){
+  const c=document.getElementById('queue-list');
+  if(!c)return;
+  if(!QUEUE_DATA.length){
+    c.innerHTML='<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">📭 Hàng đợi trống</div>';
+    return;
+  }
+  c.innerHTML=QUEUE_DATA.map(q=>`
+    <div class="queue-item">
+      <span class="queue-pos">#${q.pos}</span>
+      <span class="queue-plat">${q.plat}</span>
+      <span class="queue-user">@${q.name}</span>
+      ${q.tier?`<span class="badge ${q.tier==='VIP'?'amber':'purple'}" style="font-size:10px">${q.tier==='VIP'?'⭐':'💎'} ${q.tier}</span>`:''}
+      <span class="queue-url">${q.url}</span>
+      <button class="btn sm ban" onclick="removeFromQueue(${q.pos-1})">✕ Xóa</button>
+    </div>`).join('');
+}
 
-    function manageUser() {
-        const userId = document.getElementById('mgr-id').value;
-        const action = document.getElementById('mgr-action').value;
-        if (!userId) return alert('Vui lòng nhập ID!');
-        
-        let endpoint = '';
-        let payload = { userId };
-        
-        if (action === 'ban' || action === 'unban' || action === 'mute' || action === 'unmute') {
-            endpoint = action;
-        } else {
-            endpoint = 'vip';
-            payload.action = action === 'vip_add' ? 'add' : 'remove';
-        }
-        
-        callApi(endpoint, payload);
-    }
+function removeFromQueue(idx){
+  QUEUE_DATA.splice(idx,1);
+  QUEUE_DATA.forEach((q,i)=>q.pos=i+1);
+  buildQueue();
+  const w=QUEUE_DATA.length;
+  document.getElementById('queue-badge').textContent=w+' chờ';
+  document.getElementById('queue-waiting').textContent=w;
+  toast('Đã xóa khỏi hàng đợi','ok');
+}
 
-    loadStats();
-    // Auto-refresh every 30 seconds
-    setInterval(loadStats, 30000);
+function buildLogs(data){
+  const t=document.getElementById('logs-tbody');
+  if(!t)return;
+  const typeLabel={
+    ok:'<span class="badge green">✅ OK</span>',
+    err:'<span class="badge red">❌ Lỗi</span>',
+    warn:'<span class="badge amber">⚠️ Warn</span>'
+  };
+  t.innerHTML=data.map(l=>`
+    <tr>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${l.time}</td>
+      <td>${typeLabel[l.type]||''}</td>
+      <td style="color:var(--text2)">${l.platform}</td>
+      <td style="color:var(--blue)">@${l.user}</td>
+      <td style="color:var(--text2);font-size:11px">${l.detail}</td>
+    </tr>`).join('');
+}
+
+// =========================================================
+// NAVIGATION
+// =========================================================
+function gotoPage(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const p=document.getElementById('page-'+id);
+  if(p)p.classList.add('active');
+  if(el)el.classList.add('active');
+}
+
+function switchTab(prefix,id,el){
+  document.querySelectorAll('[id^="'+prefix+'-"]').forEach(t=>t.classList.remove('active'));
+  el.closest('.tab-bar').querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const target=document.getElementById(id);
+  if(target)target.classList.add('active');
+  if(el)el.classList.add('active');
+}
+
+// =========================================================
+// ACTIONS
+// =========================================================
+function toggleSetting(el,key){
+  el.classList.toggle('on');
+  el.classList.toggle('off');
+  const on=el.classList.contains('on');
+  toast((on?'✅ Đã bật: ':'⛔ Đã tắt: ')+key,'ok');
+}
+
+let toastTimer;
+function toast(msg,type='ok'){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast '+type+' show';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+const ACTIONS={
+  ban:{uid:'ban-uid',extra:'ban-reason',msg:(id,r)=>`🚫 Đã ban ID: ${id}${r?' — '+r:''}`},
+  unban:{uid:'unban-uid',msg:id=>`✅ Đã unban ID: ${id}`},
+  mute:{uid:'unban-uid',msg:id=>`🔇 Đã mute ID: ${id}`},
+  unmute:{uid:'unban-uid',msg:id=>`🔊 Đã unmute ID: ${id}`},
+  addvip:{uid:'vip-uid',msg:id=>`⭐ Đã cấp VIP cho ID: ${id}`},
+  removevip:{uid:'vip-uid',msg:id=>`Đã xóa VIP ID: ${id}`},
+  addprem:{uid:'prem-uid',msg:id=>`💎 Đã cấp Premium cho ID: ${id}`},
+  remprem:{uid:'prem-uid',msg:id=>`Đã xóa Premium ID: ${id}`},
+  warn:{uid:'warn-uid',extra:'warn-reason',msg:(id,r)=>`⚠️ Đã cảnh cáo ID: ${id}${r?' — '+r:''}`},
+  clearwarn:{uid:'warn-uid',msg:id=>`Đã xóa cảnh cáo ID: ${id}`},
+  slowmode:{uid:'slow-uid',extra:'slow-delay',msg:(id,d)=>`⏱️ Slowmode ${d||'30'}s cho ID: ${id}`},
+  clearslowmode:{uid:'slow-uid',msg:id=>`Đã tắt slowmode ID: ${id}`},
+  setlimit:{uid:'limit-uid',extra:'limit-val',msg:(id,v)=>`🚦 Giới hạn ${v||'?'}/10s cho ID: ${id}`},
+  resetlimit:{uid:'limit-uid',msg:id=>`Reset giới hạn ID: ${id}`},
+};
+
+function doAction(action){
+  const cfg=ACTIONS[action];
+  if(!cfg)return;
+  const uidEl=document.getElementById(cfg.uid);
+  if(!uidEl||!uidEl.value.trim()){toast('⚠️ Vui lòng nhập User ID','err');return;}
+  const extra=cfg.extra?document.getElementById(cfg.extra)?.value:'';
+  toast(cfg.msg(uidEl.value.trim(),extra),'ok');
+}
+
+function quickBan(id,name,banned){
+  if(banned==='true'){
+    if(confirm(`Gỡ ban @${name} (ID: ${id})?`)) toast(`✅ Đã unban @${name}`,'ok');
+  } else {
+    if(confirm(`Ban @${name} (ID: ${id})?`)) toast(`🚫 Đã ban @${name}`,'ok');
+  }
+}
+function quickVip(id,name){
+  if(confirm(`Cấp VIP cho @${name} (ID: ${id})?`)) toast(`⭐ Đã cấp VIP cho @${name}`,'ok');
+}
+function clearQueue(){
+  if(!QUEUE_DATA.length){toast('Hàng đợi đã trống','warn');return;}
+  if(confirm('Xóa toàn bộ hàng đợi?')){
+    QUEUE_DATA.length=0;
+    buildQueue();
+    document.getElementById('queue-badge').textContent='0 chờ';
+    document.getElementById('queue-waiting').textContent='0';
+    toast('Đã xóa toàn bộ hàng đợi','ok');
+  }
+}
+function sendBroadcast(){
+  const msg=document.getElementById('bc-msg').value.trim();
+  if(!msg){toast('⚠️ Vui lòng nhập nội dung','err');return;}
+  const target=document.getElementById('bc-target');
+  const type=document.getElementById('bc-type').value;
+  const cnt=target.value==='all'?'1,048':target.value==='vip'?'8':'23';
+  toast(`${type==='announce'?'📌':'📢'} Đã gửi tới ${cnt} users`,'ok');
+  document.getElementById('bc-msg').value='';
+}
+function sendDM(){
+  const uid=document.getElementById('dm-uid').value.trim();
+  const msg=document.getElementById('dm-msg').value.trim();
+  if(!uid){toast('⚠️ Cần nhập User ID','err');return;}
+  if(!msg){toast('⚠️ Cần nhập nội dung','err');return;}
+  toast(`💬 DM đã gửi tới ID: ${uid}`,'ok');
+  document.getElementById('dm-msg').value='';
+}
+function doMaintenance(state){
+  const t=document.getElementById('t-maintenance');
+  if(state==='on'){t.className='toggle on';toast('🔧 Đã bật chế độ bảo trì','warn');}
+  else{t.className='toggle off';toast('✅ Đã tắt chế độ bảo trì','ok');}
+}
+function saveSettings(){toast('💾 Cài đặt đã được lưu thành công','ok');}
+function filterLogs(){
+  const f=document.getElementById('log-filter').value;
+  const data=f==='all'?LOGS_DATA:LOGS_DATA.filter(l=>l.type===f);
+  buildLogs(data);
+}
+function refreshLogs(){filterLogs();toast('↻ Đã làm mới nhật ký','ok');}
+
+// =========================================================
+// CLOCK
+// =========================================================
+function updateClock(){
+  const now=new Date();
+  const s=`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+  const el=document.getElementById('sidebar-time');
+  if(el)el.textContent=s;
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// =========================================================
+// LIVE FEED
+// =========================================================
+const LOG_TYPES=['ok','err','warn'];
+const LOG_PLATFORMS=['TikTok','Facebook','YouTube','Instagram','Reddit','Twitter','Bilibili'];
+const LOG_USERS=['nguyen_van_a','tran_thi_b','minh_hung','thu_hien','le_van_c','duc_anh','mai_linh'];
+const LOG_DETAILS={
+  ok:['Video tải thành công','Reel tải xong','HD video OK','Audio trích xuất OK'],
+  err:['Lỗi timeout','Video bị xóa','Khu vực giới hạn','Link không hợp lệ'],
+  warn:['Rate limit vượt ngưỡng','File gần giới hạn 50MB','Spam detected']
+};
+setInterval(()=>{
+  const t=LOG_TYPES[Math.floor(Math.random()*3)];
+  const now=new Date();
+  const ts=`${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+  const tm=ts.slice(0,5);
+  const plat=LOG_PLATFORMS[Math.floor(Math.random()*LOG_PLATFORMS.length)];
+  const usr=LOG_USERS[Math.floor(Math.random()*LOG_USERS.length)];
+  const detail=LOG_DETAILS[t][Math.floor(Math.random()*LOG_DETAILS[t].length)];
+  const msgs={ok:'tải video thành công',err:'gặp lỗi tải video',warn:'bị cảnh báo spam'};
+  LOGS_DATA.unshift({time:ts,type:t,platform:plat,user:usr,detail:detail});
+  if(LOGS_DATA.length>50)LOGS_DATA.pop();
+  ACTIVITIES.unshift({type:t,text:`@${usr} ${msgs[t]} (${plat})`,time:tm});
+  if(ACTIVITIES.length>10)ACTIVITIES.pop();
+  if(document.getElementById('page-logs').classList.contains('active'))filterLogs();
+  if(document.getElementById('page-overview').classList.contains('active'))buildActivityFeed();
+},6000);
+
+// =========================================================
+// INIT
+// =========================================================
+buildHourlyChart();
+buildPlatformList();
+buildActivityFeed();
+buildUsersTable(USERS);
+buildQueue();
+buildLogs(LOGS_DATA);
 </script>
 </body>
 </html>
