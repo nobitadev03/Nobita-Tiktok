@@ -60,6 +60,9 @@ let botSettings = {
     welcomeMsg: '',
     autoDeleteProcessing: true,
     notifyAdmin: true,
+    autoBanSpam: true,
+    supportTikTokHD: true,
+    mp3Button: true,
 };
 
 // ============================================================
@@ -137,7 +140,7 @@ loadData();
 // ============================================================
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 app.get('/health', (req, res) => res.json({
     status: 'ok',
@@ -280,12 +283,49 @@ app.post('/api/admin/maintenance', requireAdminToken, async (req, res) => {
 });
 
 app.post('/api/admin/settings', requireAdminToken, (req, res) => {
+    if (req.body.maintenanceMode !== undefined) {
+        maintenanceMode = req.body.maintenanceMode === true;
+        delete req.body.maintenanceMode;
+    }
     botSettings = { ...botSettings, ...req.body };
     saveData(); res.json({ success: true, botSettings });
 });
 
 app.get('/api/admin/settings', requireAdminToken, (req, res) => {
     res.json(botSettings);
+});
+
+app.post('/api/admin/resetstats', requireAdminToken, (req, res) => {
+    stats.totalRequests = 0;
+    stats.successfulDownloads = 0;
+    stats.failedDownloads = 0;
+    hourlyStats = new Array(24).fill(0);
+    dailyStats = { date: new Date().toDateString(), requests: 0, downloads: 0 };
+    addActivityLog('warn', '🗑️ Admin đã reset thống kê hệ thống');
+    saveData();
+    res.json({ success: true });
+});
+
+app.post('/api/admin/clearmp3', requireAdminToken, (req, res) => {
+    mp3Cache.clear();
+    addActivityLog('warn', '🗑️ Admin đã xóa MP3 cache');
+    res.json({ success: true });
+});
+
+app.post('/api/admin/import', requireAdminToken, (req, res) => {
+    try {
+        const payload = req.body.data;
+        if (!payload || typeof payload !== 'object' || !payload.stats) {
+            return res.status(400).json({ success: false, error: 'Sai định dạng file backup' });
+        }
+        
+        fs.writeFileSync(DATA_FILE, JSON.stringify(payload, null, 2));
+        loadData();
+        addActivityLog('warn', '📥 Admin đã nhập dữ liệu backup mới');
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.post('/api/admin/warn', requireAdminToken, async (req, res) => {
@@ -1339,6 +1379,15 @@ async function downloadFacebookVideo(fbUrl) {
 
     const apis = [
         async () => {
+            const youtubedl = require('youtube-dl-exec');
+            const info = await youtubedl(realUrl, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
+            let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
+                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
+            const finalUrl = format ? format.url : info.url;
+            if (finalUrl) return { url: finalUrl, title: info.title || 'Facebook Video' };
+            throw new Error('yt-dlp failed for FB');
+        },
+        async () => {
             const res = await axios.post('https://snapsave.app/action.php', new URLSearchParams({ url: realUrl }), {
                 timeout: 20000,
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://snapsave.app/' }
@@ -1352,6 +1401,23 @@ async function downloadFacebookVideo(fbUrl) {
                 || html.match(/href="(https:\/\/[^"]+rapidcdn\.app[^"]+)"/i);
             if (m) return { url: m[1], title: 'Facebook Video' };
             throw new Error('SnapSave failed');
+        },
+        async () => {
+            const res = await axios.post('https://api.cobalt.tools/', { url: realUrl }, {
+                timeout: 15000,
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.url) return { url: res.data.url, title: 'Facebook Video' };
+            throw new Error('Cobalt failed');
+        },
+        async () => {
+            const res = await axios.post('https://getmyfb.com/api/ajaxSearch', new URLSearchParams({ q: realUrl, t: 'media', lang: 'en' }), {
+                timeout: 15000,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const m = (res.data?.data || '').match(/href="([^"]+)"[^>]*>\s*Download HD/i) || (res.data?.data || '').match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
+            if (m) return { url: m[1], title: 'Facebook Video' };
+            throw new Error('GetMyFB failed');
         },
         async () => {
             const res = await axios.post('https://www.getfvid.com/downloader', new URLSearchParams({ URLz: realUrl }), {
