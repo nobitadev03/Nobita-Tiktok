@@ -452,15 +452,13 @@ async function handleSuspiciousUser(userId, username) {
 // ============================================================
 // 🤖 BOT COMMANDS
 // ============================================================
-
 // /start
 bot.onText(/^\/start$/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
     const username = msg.from?.first_name || 'bạn';
     const badge = getUserBadge(userId);
-
-    const supportedPlatforms = Object.values(PLATFORMS).map(p => `  ${p.emoji} ${p.name}`).join('\n');
+    const supportedPlatforms = Object.values(PLATFORMS).map(p => ` ${p.emoji} ${p.name}`).join('\n');
 
     await bot.sendMessage(chatId,
         `${badge ? badge + ' ' : ''}👋 Chào *${username}*! Mình là *Nobita Bot v${BOT_VERSION}*\n\n` +
@@ -476,29 +474,70 @@ bot.onText(/^\/start$/, async (msg) => {
     );
 });
 
-// /help
-bot.onText(/^\/help$/, (msg) => {
+// /help - Tùy theo quyền Admin hay User thường
+bot.onText(/^\/help$/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
-    bot.sendMessage(chatId,
-        `📖 *Danh sách lệnh:*\n\n` +
-        `*Cơ bản:*\n` +
-        `• /start - Khởi động bot\n` +
-        `• /help - Xem hướng dẫn\n` +
-        `• /ping - Kiểm tra độ trễ\n` +
-        `• /status - Trạng thái bot\n` +
-        `• /platforms - Nền tảng hỗ trợ\n\n` +
-        `*Cá nhân:*\n` +
-        `• /history - Lịch sử tải của bạn\n` +
-        `• /myinfo - Thông tin tài khoản\n` +
-        `• /top - BXH người dùng tích cực\n` +
-        `• /report <lỗi> - Gửi phản hồi admin\n\n` +
-        `💡 Gửi link video để tải (không logo/watermark)\n` +
-        `🎵 Sau khi tải, bấm *[Tải MP3]* để lấy audio`,
-        { parse_mode: 'Markdown' }
-    );
-});
+    const isAdminUser = userId === ADMIN_USER_ID;
 
+    let text = `📖 *Hướng dẫn Nobita Bot v${BOT_VERSION}*\n\n`;
+
+    // Lệnh cho tất cả người dùng
+    text += `🔸 *Lệnh cơ bản:*\n`;
+    text += `• /start — Khởi động bot\n`;
+    text += `• /help — Xem hướng dẫn\n`;
+    text += `• /ping — Kiểm tra tốc độ\n`;
+    text += `• /status — Trạng thái bot\n`;
+    text += `• /platforms — Nền tảng hỗ trợ\n`;
+    text += `• /myinfo — Thông tin tài khoản\n`;
+    text += `• /history — Lịch sử tải của bạn\n`;
+    text += `• /top — Top người dùng tích cực\n`;
+    text += `• /report <nội dung> — Báo lỗi cho admin\n\n`;
+
+    text += `💡 Gửi link video bất kỳ để tải (không watermark).\n\n`;
+
+    // Lệnh chỉ Admin thấy
+    if (isAdminUser) {
+        text += `👑 *Lệnh Admin (Chỉ bạn nhìn thấy):*\n`;
+        text += `• /stats — Thống kê đầy đủ\n`;
+        text += `• /panel — Mở nhanh panel\n`;
+        text += `• /botinfo — Thông tin hệ thống\n`;
+        text += `• /users — Danh sách users\n`;
+        text += `• /vips — Danh sách VIP\n`;
+        text += `• /premiums — Danh sách Premium\n`;
+        text += `• /limits — Giới hạn tùy chỉnh\n`;
+        text += `• /queue — Xem hàng đợi\n`;
+        text += `• /clearqueue — Xóa hàng đợi\n`;
+        text += `• /broadcast <text> — Gửi thông báo\n`;
+        text += `• /announce <text> — Thông báo quan trọng\n`;
+        text += `• /ban <id> — Ban user\n`;
+        text += `• /unban <id> — Gỡ ban\n`;
+        text += `• /warn <id> [lý do] — Cảnh cáo\n`;
+        text += `• /clearwarn <id> — Xóa cảnh cáo\n`;
+        text += `• /mute <id> — Khóa nhắn tin\n`;
+        text += `• /unmute <id> — Mở khóa\n`;
+        text += `• /addvip <id> — Cấp VIP\n`;
+        text += `• /removevip <id> — Thu hồi VIP\n`;
+        text += `• /premium <id> — Cấp Premium\n`;
+        text += `• /removepremium <id> — Thu hồi Premium\n`;
+        text += `• /setlimit <id> <số> — Giới hạn request\n`;
+        text += `• /resetlimit <id> — Reset giới hạn\n`;
+        text += `• /slowmode <id> <giây> — Bật slowmode\n`;
+        text += `• /clearslowmode <id> — Tắt slowmode\n`;
+        text += `• /caption <text> — Đổi caption\n`;
+        text += `• /setmaxsize <MB> — Giới hạn file size\n`;
+        text += `• /maintenance on/off — Bật/Tắt bảo trì\n`;
+    }
+
+    await bot.sendMessage(chatId, text, {
+        parse_mode: 'Markdown',
+        reply_markup: isAdminUser ? {
+            inline_keyboard: [
+                [{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]
+            ]
+        } : {}
+    });
+});
 // /ping
 bot.onText(/^\/ping$/, async (msg) => {
     const chatId = msg.chat.id;
