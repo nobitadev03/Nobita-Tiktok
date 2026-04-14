@@ -1,1062 +1,1942 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nobita Bot v3.0 — Admin Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --bg:#0f1117;--bg2:#161b27;--bg3:#1e2538;
-  --border:#2a3350;--border2:#3a4a6a;
-  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
-  --blue:#3b82f6;--blue2:#1d4ed8;--green:#22c55e;
-  --amber:#f59e0b;--red:#ef4444;--purple:#a855f7;
-  --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;
-}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
-.shell{display:flex;height:100vh;overflow:hidden}
-/* SIDEBAR */
-.sidebar{width:210px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
-.logo{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.logo-text{font-weight:600;font-size:14px}
-.logo-ver{font-size:10px;color:var(--text3);font-family:var(--mono)}
-nav{flex:1;padding:8px 0;overflow-y:auto}
-.nav-section{padding:14px 14px 4px;font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase}
-.nav-item{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;font-size:13px;color:var(--text2);transition:all .15s;border-left:2px solid transparent}
-.nav-item:hover{background:var(--bg3);color:var(--text)}
-.nav-item.active{background:var(--bg3);color:var(--blue);border-left-color:var(--blue)}
-.nav-icon{width:15px;text-align:center;font-size:13px;flex-shrink:0}
-.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;flex-shrink:0;animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.sidebar-footer{padding:12px 14px;border-top:1px solid var(--border)}
-.footer-info{font-size:11px;color:var(--text3);font-family:var(--mono)}
-/* CONTENT */
-.content{flex:1;overflow-y:auto;overflow-x:hidden}
-.page{display:none}
-.page.active{display:block}
-.topbar{padding:13px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2);position:sticky;top:0;z-index:10}
-.topbar-title{font-size:14px;font-weight:600}
-.topbar-right{display:flex;align-items:center;gap:8px}
-/* BADGES */
-.badge{padding:3px 9px;border-radius:4px;font-size:11px;font-weight:500;font-family:var(--mono)}
-.badge.green{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
-.badge.red{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3)}
-.badge.blue{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
-.badge.amber{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.3)}
-.badge.purple{background:rgba(168,85,247,.12);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
-.badge.gray{background:rgba(100,116,139,.1);color:var(--text3);border:1px solid var(--border)}
-.uptime-badge{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);color:var(--green);padding:3px 10px;border-radius:4px;font-size:11px;font-family:var(--mono)}
-/* METRICS */
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 22px}
-.metric{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;transition:.2s}
-.metric:hover{border-color:var(--border2)}
-.metric-label{font-size:10px;color:var(--text3);margin-bottom:7px;text-transform:uppercase;letter-spacing:.06em}
-.metric-val{font-size:24px;font-weight:600;font-family:var(--mono)}
-.metric-sub{font-size:11px;color:var(--text3);margin-top:5px}
-.metric-sub.up{color:var(--green)}
-.metric-sub.dn{color:var(--red)}
-/* SECTIONS */
-.section{padding:0 22px 18px}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
-.section-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.07em}
-.table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{padding:9px 13px;text-align:left;color:var(--text3);font-weight:500;border-bottom:1px solid var(--border);background:var(--bg3);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-td{padding:9px 13px;color:var(--text2);border-bottom:1px solid var(--border)}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,.015)}
-.user-name{color:var(--text);font-weight:500}
-/* BUTTONS */
-.btn{display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:5px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);transition:all .15s;font-family:var(--font)}
-.btn:hover{background:var(--bg);color:var(--text)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.btn.sm{padding:3px 8px;font-size:10px}
-.btn.ban{border-color:rgba(239,68,68,.35);color:var(--red);background:rgba(239,68,68,.07)}
-.btn.ban:hover{background:rgba(239,68,68,.16)}
-.btn.vip{border-color:rgba(245,158,11,.35);color:var(--amber);background:rgba(245,158,11,.07)}
-.btn.vip:hover{background:rgba(245,158,11,.16)}
-.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue2)}
-.btn.primary:hover{background:var(--blue2)}
-.btn.danger{background:rgba(239,68,68,.1);color:var(--red);border-color:rgba(239,68,68,.35)}
-.btn.danger:hover{background:rgba(239,68,68,.2)}
-/* CHARTS */
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 22px 18px}
-.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
-.chart-title{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
-.bar-chart{display:flex;align-items:flex-end;gap:2px;height:90px}
-.bar{flex:1;border-radius:2px 2px 0 0;min-height:2px;cursor:pointer;transition:opacity .2s;opacity:.7}
-.bar:hover{opacity:1}
-.bar.blue{background:var(--blue)}
-.bar.green{background:var(--green)}
-.bar.amber{background:var(--amber)}
-.platform-list{display:flex;flex-direction:column;gap:8px}
-.platform-row{display:flex;align-items:center;gap:10px}
-.platform-name{font-size:11px;color:var(--text2);width:72px;flex-shrink:0}
-.platform-bar-wrap{flex:1;background:var(--bg3);border-radius:2px;height:6px;overflow:hidden}
-.platform-bar{height:100%;border-radius:2px;transition:width .6s ease}
-.platform-pct{font-size:10px;color:var(--text3);font-family:var(--mono);width:32px;text-align:right;flex-shrink:0}
-/* FORMS */
-.actions-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 22px}
-.action-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px}
-.action-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:12px}
-.form-group{margin-bottom:11px}
-.form-label{font-size:11px;color:var(--text3);margin-bottom:5px;display:block}
-.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;transition:.15s}
-.form-input:focus{border-color:var(--blue);background:var(--bg)}
-.form-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px 10px;color:var(--text);font-size:12px;font-family:var(--font);resize:vertical;min-height:72px;outline:none;transition:.15s}
-.form-textarea:focus{border-color:var(--blue);background:var(--bg)}
-/* TOGGLES */
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)}
-.toggle-row:last-child{border-bottom:none}
-.toggle-label{font-size:12px;color:var(--text2)}
-.toggle{width:34px;height:19px;border-radius:10px;position:relative;cursor:pointer;transition:.2s;flex-shrink:0}
-.toggle.on{background:var(--blue)}
-.toggle.off{background:var(--bg3);border:1px solid var(--border2)}
-.toggle::after{content:'';width:13px;height:13px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:.2s}
-.toggle.on::after{left:18px}
-.toggle.off::after{left:3px}
-/* QUEUE */
-.queue-item{display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--border);font-size:12px}
-.queue-item:last-child{border-bottom:none}
-.queue-pos{width:22px;font-family:var(--mono);color:var(--text3);font-size:11px;flex-shrink:0}
-.queue-plat{font-size:15px;flex-shrink:0}
-.queue-user{color:var(--blue);font-weight:500;flex-shrink:0}
-.queue-url{color:var(--text3);font-family:var(--mono);font-size:10px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:0 6px}
-/* ACTIVITY */
-.activity-feed{max-height:200px;overflow-y:auto}
-.activity-item{display:flex;align-items:flex-start;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border)}
-.activity-item:last-child{border-bottom:none}
-.activity-dot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
-.activity-dot.ok{background:var(--green)}
-.activity-dot.err{background:var(--red)}
-.activity-dot.warn{background:var(--amber)}
-.activity-text{font-size:11px;color:var(--text2);flex:1;line-height:1.5}
-.activity-time{font-size:10px;color:var(--text3);font-family:var(--mono);flex-shrink:0}
-/* TABS */
-.tab-bar{display:flex;border-bottom:1px solid var(--border);padding:0 22px}
-.tab{padding:11px 15px;font-size:12px;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap}
-.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
-.tab:hover{color:var(--text2)}
-.tab-content{display:none;padding:16px 22px}
-.tab-content.active{display:block}
-/* MISC */
-.stat-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
-.stat-row:last-child{border-bottom:none}
-.stat-key{font-size:12px;color:var(--text3);width:160px;flex-shrink:0}
-.stat-val{font-size:12px;color:var(--text);font-family:var(--mono);font-weight:500}
-.search-wrap{padding:12px 22px 10px}
-.search-input{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:9px 13px;color:var(--text);font-size:13px;font-family:var(--font);outline:none;transition:.15s}
-.search-input:focus{border-color:var(--blue)}
-.select{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 9px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;cursor:pointer;transition:.15s}
-.select:focus{border-color:var(--blue)}
-/* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;padding:11px 16px;font-size:12px;color:var(--text);z-index:9999;transform:translateY(12px);opacity:0;transition:all .22s;pointer-events:none;max-width:300px}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.ok{border-left:3px solid var(--green)}
-.toast.err{border-left:3px solid var(--red)}
-.toast.warn{border-left:3px solid var(--amber)}
-/* LOADING */
-.loading{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--text3);font-size:13px;gap:8px}
-.spinner{width:16px;height:16px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-@keyframes spin{to{transform:rotate(360deg)}}
-.empty{padding:30px;text-align:center;color:var(--text3);font-size:13px}
-/* SCROLLBAR */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
-</style>
-</head>
-<body>
-<div class="shell">
-
-<!-- SIDEBAR -->
-<div class="sidebar">
-  <div class="logo">
-    <div class="logo-icon">🤖</div>
-    <div>
-      <div class="logo-text">Nobita Bot</div>
-      <div class="logo-ver" id="bot-version">v3.0 admin</div>
-    </div>
-  </div>
-  <nav>
-    <div class="nav-section">Main</div>
-    <div class="nav-item active" onclick="gotoPage('overview',this)">
-      <span class="nav-icon">📊</span>Tổng quan<span class="status-dot" id="online-dot" style="display:none"></span>
-    </div>
-    <div class="nav-item" onclick="gotoPage('users',this)"><span class="nav-icon">👥</span>Người dùng</div>
-    <div class="nav-item" onclick="gotoPage('queue',this)"><span class="nav-icon">📋</span>Hàng đợi</div>
-    <div class="nav-section">Quản lý</div>
-    <div class="nav-item" onclick="gotoPage('broadcast',this)"><span class="nav-icon">📢</span>Broadcast</div>
-    <div class="nav-item" onclick="gotoPage('moderation',this)"><span class="nav-icon">🛡️</span>Kiểm duyệt</div>
-    <div class="nav-section">Hệ thống</div>
-    <div class="nav-item" onclick="gotoPage('settings',this)"><span class="nav-icon">⚙️</span>Cài đặt</div>
-    <div class="nav-item" onclick="gotoPage('logs',this)"><span class="nav-icon">📝</span>Nhật ký</div>
-  </nav>
-  <div class="sidebar-footer">
-    <div class="footer-info" id="sidebar-clock">--:--:--</div>
-    <div class="footer-info" style="margin-top:3px;color:var(--text3)" id="sidebar-date">--</div>
-  </div>
-</div>
-
-<!-- CONTENT -->
-<div class="content">
-
-<!-- ===== OVERVIEW ===== -->
-<div class="page active" id="page-overview">
-  <div class="topbar">
-    <div class="topbar-title">Tổng quan hệ thống</div>
-    <div class="topbar-right">
-      <span class="uptime-badge" id="uptime-display">⬤ Đang kết nối...</span>
-      <span class="badge" id="maint-badge" style="display:none"></span>
-      <button class="btn sm" onclick="loadStats()" title="Làm mới">↻</button>
-    </div>
-  </div>
-  <div class="metrics">
-    <div class="metric">
-      <div class="metric-label">Tổng requests</div>
-      <div class="metric-val" id="m-total">—</div>
-      <div class="metric-sub" id="m-today">Hôm nay: —</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Tải thành công</div>
-      <div class="metric-val" style="color:var(--green)" id="m-success">—</div>
-      <div class="metric-sub up" id="m-rate">—% tỷ lệ</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Tổng users</div>
-      <div class="metric-val" id="m-users">—</div>
-      <div class="metric-sub" id="m-vip-prem">VIP: — | Premium: —</div>
-    </div>
-    <div class="metric">
-      <div class="metric-label">Thất bại</div>
-      <div class="metric-val" style="color:var(--red)" id="m-fail">—</div>
-      <div class="metric-sub dn" id="m-banned">Banned: —</div>
-    </div>
-  </div>
-  <div class="charts">
-    <div class="chart-card">
-      <div class="chart-title">Hoạt động 24h (requests/giờ)</div>
-      <div class="bar-chart" id="hourly-chart"><div class="loading"><div class="spinner"></div></div></div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title">Hàng đợi thời gian thực</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div style="background:var(--bg3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">ĐANG XỬ LÝ</div>
-          <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--blue)" id="q-processing">—</div>
-          <div style="font-size:10px;color:var(--text3)" id="q-max">/ — slots</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:10px;text-align:center">
-          <div style="font-size:10px;color:var(--text3);margin-bottom:4px">ĐANG CHỜ</div>
-          <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--amber)" id="q-waiting">—</div>
-          <div style="font-size:10px;color:var(--text3)">requests</div>
-        </div>
-      </div>
-      <div style="font-size:10px;color:var(--text3);text-align:center" id="q-updated">Chưa cập nhật</div>
-    </div>
-  </div>
-  <div class="section">
-    <div class="section-header">
-      <div class="section-title">Thống kê hệ thống</div>
-      <span style="font-size:10px;color:var(--text3)" id="stats-updated">—</span>
-    </div>
-    <div class="table-wrap" style="padding:12px 16px">
-      <div class="stat-row"><div class="stat-key">Bot version</div><div class="stat-val" id="s-version">—</div></div>
-      <div class="stat-row"><div class="stat-key">Uptime</div><div class="stat-val" id="s-uptime">—</div></div>
-      <div class="stat-row"><div class="stat-key">Max concurrent</div><div class="stat-val" id="s-maxcon">—</div></div>
-      <div class="stat-row"><div class="stat-key">Tải hôm nay</div><div class="stat-val" id="s-today-dl">—</div></div>
-      <div class="stat-row"><div class="stat-key">Tỷ lệ thành công</div><div class="stat-val" id="s-rate">—</div></div>
-      <div class="stat-row"><div class="stat-key">VIP users</div><div class="stat-val" style="color:var(--amber)" id="s-vip">—</div></div>
-      <div class="stat-row"><div class="stat-key">Premium users</div><div class="stat-val" style="color:var(--purple)" id="s-premium">—</div></div>
-      <div class="stat-row"><div class="stat-key">Banned users</div><div class="stat-val" style="color:var(--red)" id="s-banned">—</div></div>
-      <div class="stat-row"><div class="stat-key">Muted users</div><div class="stat-val" id="s-muted">—</div></div>
-      <div class="stat-row"><div class="stat-key">Chế độ bảo trì</div><div class="stat-val" id="s-maint">—</div></div>
-    </div>
-  </div>
-  <div class="section">
-    <div class="section-header">
-      <div class="section-title">Biểu đồ hoạt động theo giờ</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)">
-        <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span>
-      </div>
-      <div class="bar-chart" id="hourly-chart-big" style="height:110px"></div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== USERS ===== -->
-<div class="page" id="page-users">
-  <div class="topbar">
-    <div class="topbar-title">Quản lý người dùng</div>
-    <div class="topbar-right">
-      <select class="select" id="user-filter" onchange="filterUsers()">
-        <option value="all">Tất cả</option>
-        <option value="vip">VIP ⭐</option>
-        <option value="premium">Premium 💎</option>
-        <option value="banned">Đã ban 🚫</option>
-        <option value="warned">Có cảnh cáo ⚠️</option>
-      </select>
-      <span class="badge blue" id="user-count-badge">—</span>
-      <button class="btn sm" onclick="loadUsers()">↻ Tải lại</button>
-    </div>
-  </div>
-  <div class="search-wrap">
-    <input class="search-input" placeholder="🔍  Tìm theo tên hoặc User ID..." id="user-search" oninput="filterUsers()">
-  </div>
-  <div class="section" style="padding-top:0">
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th>#</th><th>Người dùng</th><th>User ID</th><th>Lượt tải</th><th>Lần cuối</th><th>Cấp bậc</th><th>Cảnh cáo</th><th>Hành động</th>
-        </tr></thead>
-        <tbody id="users-tbody">
-          <tr><td colspan="8"><div class="loading"><div class="spinner"></div>Đang tải...</div></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- ===== QUEUE ===== -->
-<div class="page" id="page-queue">
-  <div class="topbar">
-    <div class="topbar-title">Hàng đợi xử lý</div>
-    <div class="topbar-right">
-      <span class="badge amber" id="queue-badge">—</span>
-      <button class="btn sm" onclick="loadQueuePage()">↻ Làm mới</button>
-      <button class="btn danger" onclick="clearQueue()">🗑️ Xóa hàng đợi</button>
-    </div>
-  </div>
-  <div style="padding:16px 22px 8px">
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
-      <div class="metric"><div class="metric-label">Đang xử lý</div><div class="metric-val" style="color:var(--blue)" id="qp-processing">—</div></div>
-      <div class="metric"><div class="metric-label">Đang chờ</div><div class="metric-val" style="color:var(--amber)" id="qp-waiting">—</div></div>
-      <div class="metric"><div class="metric-label">Tổng hoàn thành</div><div class="metric-val" style="color:var(--green)" id="qp-done">—</div></div>
-    </div>
-    <div class="table-wrap" id="queue-list">
-      <div class="loading"><div class="spinner"></div>Đang tải...</div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== BROADCAST ===== -->
-<div class="page" id="page-broadcast">
-  <div class="topbar"><div class="topbar-title">Gửi thông báo</div></div>
-  <div class="actions-grid">
-    <div class="action-card" style="grid-column:1/-1">
-      <div class="action-title">📢 Broadcast tin nhắn</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group">
-          <label class="form-label">Đối tượng nhận</label>
-          <select class="select" style="width:100%" id="bc-target">
-            <option value="all">📣 Tất cả người dùng</option>
-            <option value="vip">⭐ Chỉ VIP</option>
-            <option value="premium">💎 Chỉ Premium</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Loại thông báo</label>
-          <select class="select" style="width:100%" id="bc-type">
-            <option value="broadcast">📢 Broadcast thường</option>
-            <option value="announce">📌 Thông báo quan trọng</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Nội dung (hỗ trợ *bold* _italic_ `code` Markdown)</label>
-        <textarea class="form-textarea" id="bc-msg" style="min-height:100px" placeholder="Nhập nội dung thông báo..."></textarea>
-      </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px">
-        <button class="btn" onclick="document.getElementById('bc-msg').value=''">Xóa</button>
-        <button class="btn primary" id="bc-btn" onclick="sendBroadcast()">📢 Gửi ngay</button>
-      </div>
-    </div>
-    <div class="action-card">
-      <div class="action-title">💬 Nhắn tin trực tiếp (DM)</div>
-      <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="dm-uid" placeholder="123456789"></div>
-      <div class="form-group"><label class="form-label">Nội dung</label><textarea class="form-textarea" id="dm-msg" style="min-height:100px" placeholder="Nhập tin nhắn..."></textarea></div>
-      <button class="btn primary" id="dm-btn" onclick="sendDM()" style="width:100%">💬 Gửi DM</button>
-    </div>
-    <div class="action-card">
-      <div class="action-title">🔧 Chế độ bảo trì</div>
-      <div style="padding:10px;background:var(--bg3);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--text2)">
-        Trạng thái: <strong id="maint-status-text" style="color:var(--text)">Đang tải...</strong>
-      </div>
-      <div class="form-group"><label class="form-label">Thông báo gửi kèm (tùy chọn)</label>
-        <textarea class="form-textarea" id="maint-msg" style="min-height:55px" placeholder="Bot đang bảo trì, vui lòng quay lại sau..."></textarea>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button class="btn danger" onclick="doMaintenance('on')" style="width:100%">🔧 Bật bảo trì</button>
-        <button class="btn primary" onclick="doMaintenance('off')" style="width:100%">✅ Tắt bảo trì</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== MODERATION ===== -->
-<div class="page" id="page-moderation">
-  <div class="topbar"><div class="topbar-title">Kiểm duyệt người dùng</div></div>
-  <div class="tab-bar">
-    <div class="tab active" onclick="switchTab('mod','ban-tab',this)">🚫 Ban / Mute</div>
-    <div class="tab" onclick="switchTab('mod','vip-tab',this)">⭐ VIP / Premium</div>
-    <div class="tab" onclick="switchTab('mod','warn-tab',this)">⚠️ Cảnh cáo</div>
-    <div class="tab" onclick="switchTab('mod','limit-tab',this)">🚦 Giới hạn</div>
-  </div>
-
-  <div class="tab-content active" id="mod-ban-tab">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="action-card">
-        <div class="action-title">🚫 Ban người dùng</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="ban-uid" placeholder="123456789"></div>
-        <div class="form-group"><label class="form-label">Lý do</label><input class="form-input" id="ban-reason" placeholder="Vi phạm quy định..."></div>
-        <button class="btn ban" onclick="adminAction('ban')" style="width:100%">🚫 Ban ngay</button>
-      </div>
-      <div class="action-card">
-        <div class="action-title">✅ Gỡ ban / Mute</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="unban-uid" placeholder="123456789"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-          <button class="btn primary" onclick="adminAction('unban')" style="width:100%">✅ Unban</button>
-          <button class="btn" onclick="adminAction('mute')" style="width:100%">🔇 Mute</button>
-        </div>
-        <button class="btn" onclick="adminAction('unmute')" style="width:100%">🔊 Unmute</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-content" id="mod-vip-tab">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="action-card">
-        <div class="action-title">⭐ VIP — không giới hạn tốc độ</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="vip-uid" placeholder="123456789"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn vip" onclick="adminAction('addvip')" style="width:100%">⭐ Cấp VIP</button>
-          <button class="btn" onclick="adminAction('removevip')" style="width:100%">Xóa VIP</button>
-        </div>
-      </div>
-      <div class="action-card">
-        <div class="action-title">💎 Premium — 6 req/10s</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="prem-uid" placeholder="123456789"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn" style="border-color:rgba(168,85,247,.35);color:var(--purple);background:rgba(168,85,247,.07);width:100%" onclick="adminAction('addprem')">💎 Cấp Premium</button>
-          <button class="btn" onclick="adminAction('remprem')" style="width:100%">Xóa Premium</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-content" id="mod-warn-tab">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="action-card">
-        <div class="action-title">⚠️ Cảnh cáo (auto-ban sau 3 lần)</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="warn-uid" placeholder="123456789"></div>
-        <div class="form-group"><label class="form-label">Lý do</label><input class="form-input" id="warn-reason" placeholder="Vi phạm quy định..."></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn" style="border-color:rgba(245,158,11,.35);color:var(--amber);background:rgba(245,158,11,.07);width:100%" onclick="adminAction('warn')">⚠️ Cảnh cáo</button>
-          <button class="btn" onclick="adminAction('clearwarn')" style="width:100%">Xóa cảnh cáo</button>
-        </div>
-      </div>
-      <div class="action-card">
-        <div class="action-title">⏱️ Slow mode</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="slow-uid" placeholder="123456789"></div>
-        <div class="form-group"><label class="form-label">Delay giữa mỗi request (giây)</label><input class="form-input" id="slow-delay" type="number" min="1" max="3600" placeholder="30"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn" onclick="adminAction('slowmode')" style="width:100%">⏱️ Bật chậm</button>
-          <button class="btn" onclick="adminAction('clearslowmode')" style="width:100%">Tắt chậm</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="tab-content" id="mod-limit-tab">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="action-card">
-        <div class="action-title">🚦 Giới hạn tùy chỉnh</div>
-        <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="limit-uid" placeholder="123456789"></div>
-        <div class="form-group"><label class="form-label">Số req / 10s (0 = chặn hoàn toàn)</label><input class="form-input" id="limit-val" type="number" min="0" max="100" placeholder="Mặc định: 3"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <button class="btn primary" onclick="adminAction('setlimit')" style="width:100%">Áp dụng</button>
-          <button class="btn" onclick="adminAction('resetlimit')" style="width:100%">Reset</button>
-        </div>
-      </div>
-      <div class="action-card">
-        <div class="action-title">📋 Users có giới hạn tùy chỉnh</div>
-        <div id="limits-list" style="font-size:12px;color:var(--text3)">
-          <div class="loading"><div class="spinner"></div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== SETTINGS ===== -->
-<div class="page" id="page-settings">
-  <div class="topbar">
-    <div class="topbar-title">Cài đặt hệ thống</div>
-    <div class="topbar-right">
-      <button class="btn sm" onclick="loadSettings()">↻ Tải lại</button>
-      <button class="btn primary" onclick="saveSettings()">💾 Lưu cài đặt</button>
-    </div>
-  </div>
-  <div style="padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
-    <div class="action-card">
-      <div class="action-title">⚙️ Thông số bot</div>
-      <div class="form-group"><label class="form-label">Max file size (MB)</label><input class="form-input" id="s-maxsize" type="number" placeholder="50"></div>
-      <div class="form-group"><label class="form-label">Rate limit mặc định (req/10s)</label><input class="form-input" id="s-ratelimit" type="number" placeholder="3"></div>
-      <div class="form-group"><label class="form-label">Rate limit window (ms)</label><input class="form-input" id="s-window" type="number" placeholder="10000"></div>
-      <div class="form-group"><label class="form-label">Caption video</label>
-        <textarea class="form-textarea" id="s-caption" style="min-height:55px" placeholder="Caption hiển thị dưới video..."></textarea>
-      </div>
-    </div>
-    <div class="action-card">
-      <div class="action-title">🔧 Tính năng on/off</div>
-      <div class="toggle-row"><span class="toggle-label">Auto-xóa tin nhắn đang xử lý</span><div class="toggle" id="t-autodel" onclick="toggleSetting(this,'autoDeleteProcessing')"></div></div>
-      <div class="toggle-row"><span class="toggle-label">Thông báo admin khi lỗi</span><div class="toggle" id="t-notifyadmin" onclick="toggleSetting(this,'notifyAdmin')"></div></div>
-    </div>
-    <div class="action-card" style="grid-column:1/-1">
-      <div class="action-title">🗂️ Dữ liệu & Backup</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a id="export-btn" class="btn" onclick="exportData()">📤 Xuất JSON</a>
-        <button class="btn danger" onclick="if(confirm('Xóa toàn bộ temp files?'))toast('Chạy cleanup trên server','warn')">🧹 Cleanup temp</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== LOGS ===== -->
-<div class="page" id="page-logs">
-  <div class="topbar">
-    <div class="topbar-title">Nhật ký hoạt động</div>
-    <div class="topbar-right">
-      <select class="select" id="log-filter" onchange="filterLogs()">
-        <option value="all">Tất cả</option>
-        <option value="ok">✅ Thành công</option>
-        <option value="err">❌ Lỗi</option>
-        <option value="warn">⚠️ Cảnh báo</option>
-      </select>
-      <span class="badge blue" id="log-live-badge">● Live</span>
-    </div>
-  </div>
-  <div style="padding:16px 22px">
-    <div class="table-wrap">
-      <div class="activity-feed" id="live-log-feed" style="max-height:500px">
-        <div class="loading"><div class="spinner"></div>Đang tải nhật ký...</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-</div><!-- .content -->
-</div><!-- .shell -->
-<div class="toast" id="toast"></div>
-
-<script>
-// =====================================================
-// CONFIG — lấy token từ URL ?token=xxx
-// =====================================================
-const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
-const API = (path) => `${path}?token=${TOKEN}`;
-
-// =====================================================
-// API HELPERS
-// =====================================================
-async function apiFetch(path, options={}) {
-  try {
-    const url = options.method && options.method !== 'GET'
-      ? path
-      : API(path);
-    if (options.body && typeof options.body === 'object') {
-      options.body = JSON.stringify({...options.body, token: TOKEN});
-      options.headers = {'Content-Type':'application/json',...(options.headers||{})};
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nobita Bot v3.0 — Admin Dashboard</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
     }
-    const res = await fetch(url, options);
-    if (res.status === 401) { toast('❌ Token không hợp lệ','err'); return null; }
-    return await res.json();
-  } catch(e) {
-    toast('❌ Lỗi kết nối: ' + e.message, 'err');
-    return null;
-  }
-}
 
-// =====================================================
-// CLOCK
-// =====================================================
-function updateClock() {
-  const now = new Date();
-  const pad = n => n.toString().padStart(2,'0');
-  document.getElementById('sidebar-clock').textContent =
-    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-  document.getElementById('sidebar-date').textContent =
-    now.toLocaleDateString('vi-VN',{weekday:'short',day:'2-digit',month:'2-digit'});
-}
-setInterval(updateClock, 1000);
-updateClock();
+    :root {
+      --bg: #0f1117;
+      --bg2: #161b27;
+      --bg3: #1e2538;
+      --border: #2a3350;
+      --border2: #3a4a6a;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --blue: #3b82f6;
+      --blue2: #1d4ed8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --purple: #a855f7;
+      --font: 'DM Sans', sans-serif;
+      --mono: 'JetBrains Mono', monospace;
+    }
 
-// =====================================================
-// FORMAT HELPERS
-// =====================================================
-function formatUptime(seconds) {
-  const s = Math.floor(seconds);
-  const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600),
-        m = Math.floor((s%3600)/60), sec = s%60;
-  if (d>0) return `${d}d ${h}h ${m}m`;
-  if (h>0) return `${h}h ${m}m ${sec}s`;
-  return `${m}m ${sec}s`;
-}
-function formatTime(ts) {
-  return new Date(ts).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'});
-}
-function num(n) { return Number(n||0).toLocaleString('vi-VN'); }
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px
+    }
 
-// =====================================================
-// LOAD STATS (overview)
-// =====================================================
-async function loadStats() {
-  const data = await apiFetch('/api/stats');
-  if (!data) return;
+    .shell {
+      display: flex;
+      height: 100vh;
+      overflow: hidden
+    }
 
-  // metrics
-  document.getElementById('m-total').textContent = num(data.totalRequests);
-  document.getElementById('m-success').textContent = num(data.successfulDownloads);
-  document.getElementById('m-users').textContent = num(data.totalUsers);
-  document.getElementById('m-fail').textContent = num(data.failedDownloads);
-  document.getElementById('m-today').textContent = `Hôm nay: ${num(data.dailyStats?.requests||0)} requests`;
-  document.getElementById('m-rate').textContent = `${data.successRate}% tỷ lệ`;
-  document.getElementById('m-vip-prem').textContent = `VIP: ${data.vipUsers} | Premium: ${data.premiumUsers}`;
-  document.getElementById('m-banned').textContent = `Banned: ${data.bannedUsers}`;
+    /* SIDEBAR */
+    .sidebar {
+      width: 210px;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0
+    }
 
-  // queue
-  document.getElementById('q-processing').textContent = data.processing;
-  document.getElementById('q-max').textContent = `/ ${data.maxConcurrent} slots`;
-  document.getElementById('q-waiting').textContent = data.queueLength;
-  document.getElementById('q-updated').textContent = `Cập nhật: ${new Date().toLocaleTimeString('vi-VN')}`;
+    .logo {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
 
-  // system stats
-  document.getElementById('s-version').textContent = data.version || '—';
-  document.getElementById('s-uptime').textContent = formatUptime(data.uptime||0);
-  document.getElementById('s-maxcon').textContent = data.maxConcurrent || '—';
-  document.getElementById('s-today-dl').textContent = num(data.dailyStats?.downloads||0);
-  document.getElementById('s-rate').textContent = `${data.successRate}%`;
-  document.getElementById('s-vip').textContent = `${data.vipUsers} ⭐`;
-  document.getElementById('s-premium').textContent = `${data.premiumUsers} 💎`;
-  document.getElementById('s-banned').textContent = `${data.bannedUsers} 🚫`;
-  document.getElementById('s-muted').textContent = data.mutedUsers || 0;
-  document.getElementById('s-maint').textContent = data.maintenanceMode ? '🔧 BẬT' : '✅ TẮT';
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px
+    }
 
-  // uptime badge
-  document.getElementById('uptime-display').textContent = `⬤ ONLINE ${formatUptime(data.uptime||0)}`;
-  document.getElementById('online-dot').style.display = 'block';
+    .logo-text {
+      font-weight: 600;
+      font-size: 14px
+    }
 
-  // maintenance badge
-  const mb = document.getElementById('maint-badge');
-  if (data.maintenanceMode) {
-    mb.textContent = '🔧 BẢO TRÌ'; mb.className = 'badge amber'; mb.style.display = '';
-  } else { mb.style.display = 'none'; }
+    .logo-ver {
+      font-size: 10px;
+      color: var(--text3);
+      font-family: var(--mono)
+    }
 
-  // broadcast page status
-  const ms = document.getElementById('maint-status-text');
-  if (ms) ms.textContent = data.maintenanceMode ? '🔧 Đang bảo trì' : '✅ Hoạt động bình thường';
+    nav {
+      flex: 1;
+      padding: 8px 0;
+      overflow-y: auto
+    }
 
-  // hourly chart
-  if (data.hourlyStats) {
-    buildHourlyChart('hourly-chart', data.hourlyStats, 90);
-    buildHourlyChart('hourly-chart-big', data.hourlyStats, 110);
-  }
+    .nav-section {
+      padding: 14px 14px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: .08em;
+      text-transform: uppercase
+    }
 
-  document.getElementById('stats-updated').textContent = `Cập nhật ${new Date().toLocaleTimeString('vi-VN')}`;
-}
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text2);
+      transition: all .15s;
+      border-left: 2px solid transparent
+    }
 
-// =====================================================
-// HOURLY CHART
-// =====================================================
-function buildHourlyChart(id, data, height=90) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const max = Math.max(...data, 1);
-  const now = new Date().getHours();
-  el.style.height = height + 'px';
-  el.innerHTML = data.map((v, i) => {
-    const h = Math.max(Math.round((v/max)*100), v>0?2:0);
-    const cls = i === now ? 'bar amber' : i < now ? 'bar blue' : 'bar green';
-    return `<div class="${cls}" style="height:${h}%" title="${i}:00 — ${v} requests"></div>`;
-  }).join('');
-}
+    .nav-item:hover {
+      background: var(--bg3);
+      color: var(--text)
+    }
 
-// =====================================================
-// LOAD USERS
-// =====================================================
-let allUsers = [];
+    .nav-item.active {
+      background: var(--bg3);
+      color: var(--blue);
+      border-left-color: var(--blue)
+    }
 
-async function loadUsers() {
-  document.getElementById('users-tbody').innerHTML =
-    '<tr><td colspan="8"><div class="loading"><div class="spinner"></div>Đang tải dữ liệu thật...</div></td></tr>';
-  const data = await apiFetch('/api/users');
-  if (!data) return;
-  allUsers = data;
-  filterUsers();
-}
+    .nav-icon {
+      width: 15px;
+      text-align: center;
+      font-size: 13px;
+      flex-shrink: 0
+    }
 
-function filterUsers() {
-  const filter = document.getElementById('user-filter').value;
-  const search = document.getElementById('user-search').value.toLowerCase().trim();
-  const data = allUsers.filter(u => {
-    const matchSearch = !search ||
-      (u.username||'').toLowerCase().includes(search) ||
-      String(u.id).includes(search);
-    if (!matchSearch) return false;
-    if (filter === 'vip') return u.isVip;
-    if (filter === 'premium') return u.isPremium;
-    if (filter === 'banned') return u.isBanned;
-    if (filter === 'warned') return (u.warnings||0) > 0;
-    return true;
-  });
-  buildUsersTable(data);
-  document.getElementById('user-count-badge').textContent = data.length + ' users';
-}
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-left: auto;
+      flex-shrink: 0;
+      animation: pulse 2s infinite
+    }
 
-function buildUsersTable(data) {
-  const t = document.getElementById('users-tbody');
-  if (!data.length) {
-    t.innerHTML = '<tr><td colspan="8"><div class="empty">📭 Không có dữ liệu</div></td></tr>';
-    return;
-  }
-  const tierBadge = (u) => {
-    if (u.isBanned) return '<span class="badge red">🚫 Ban</span>';
-    if (u.isVip) return '<span class="badge amber">⭐ VIP</span>';
-    if (u.isPremium) return '<span class="badge purple">💎 Premium</span>';
-    if ((u.warnings||0) >= 3) return '<span class="badge red">⚠️ Danger</span>';
-    return '<span class="badge gray">User</span>';
-  };
-  const warnCell = w => w > 0
-    ? `<span style="color:var(--amber);font-weight:500">${w}/3</span>`
-    : '<span style="color:var(--text3)">—</span>';
-  const lastUsed = u => u.lastUsed
-    ? new Date(u.lastUsed).toLocaleString('vi-VN',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})
-    : '—';
+    @keyframes pulse {
 
-  t.innerHTML = data.map((u, i) => `
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .4
+      }
+    }
+
+    .sidebar-footer {
+      padding: 12px 14px;
+      border-top: 1px solid var(--border)
+    }
+
+    .footer-info {
+      font-size: 11px;
+      color: var(--text3);
+      font-family: var(--mono)
+    }
+
+    /* CONTENT */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden
+    }
+
+    .page {
+      display: none
+    }
+
+    .page.active {
+      display: block
+    }
+
+    .topbar {
+      padding: 13px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg2);
+      position: sticky;
+      top: 0;
+      z-index: 10
+    }
+
+    .topbar-title {
+      font-size: 14px;
+      font-weight: 600
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    /* BADGES */
+    .badge {
+      padding: 3px 9px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      font-family: var(--mono)
+    }
+
+    .badge.green {
+      background: rgba(34, 197, 94, .12);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, .3)
+    }
+
+    .badge.red {
+      background: rgba(239, 68, 68, .12);
+      color: var(--red);
+      border: 1px solid rgba(239, 68, 68, .3)
+    }
+
+    .badge.blue {
+      background: rgba(59, 130, 246, .12);
+      color: var(--blue);
+      border: 1px solid rgba(59, 130, 246, .3)
+    }
+
+    .badge.amber {
+      background: rgba(245, 158, 11, .12);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, .3)
+    }
+
+    .badge.purple {
+      background: rgba(168, 85, 247, .12);
+      color: var(--purple);
+      border: 1px solid rgba(168, 85, 247, .3)
+    }
+
+    .badge.gray {
+      background: rgba(100, 116, 139, .1);
+      color: var(--text3);
+      border: 1px solid var(--border)
+    }
+
+    .uptime-badge {
+      background: rgba(34, 197, 94, .08);
+      border: 1px solid rgba(34, 197, 94, .25);
+      color: var(--green);
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--mono)
+    }
+
+    /* METRICS */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      padding: 18px 22px
+    }
+
+    .metric {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      transition: .2s
+    }
+
+    .metric:hover {
+      border-color: var(--border2)
+    }
+
+    .metric-label {
+      font-size: 10px;
+      color: var(--text3);
+      margin-bottom: 7px;
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .metric-val {
+      font-size: 24px;
+      font-weight: 600;
+      font-family: var(--mono)
+    }
+
+    .metric-sub {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 5px
+    }
+
+    .metric-sub.up {
+      color: var(--green)
+    }
+
+    .metric-sub.dn {
+      color: var(--red)
+    }
+
+    /* SECTIONS */
+    .section {
+      padding: 0 22px 18px
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 11px
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text2);
+      text-transform: uppercase;
+      letter-spacing: .07em
+    }
+
+    .table-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px
+    }
+
+    th {
+      padding: 9px 13px;
+      text-align: left;
+      color: var(--text3);
+      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg3);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .05em
+    }
+
+    td {
+      padding: 9px 13px;
+      color: var(--text2);
+      border-bottom: 1px solid var(--border)
+    }
+
+    tr:last-child td {
+      border-bottom: none
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, .015)
+    }
+
+    .user-name {
+      color: var(--text);
+      font-weight: 500
+    }
+
+    /* BUTTONS */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 11px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border2);
+      background: var(--bg3);
+      color: var(--text2);
+      transition: all .15s;
+      font-family: var(--font)
+    }
+
+    .btn:hover {
+      background: var(--bg);
+      color: var(--text)
+    }
+
+    .btn:disabled {
+      opacity: .4;
+      cursor: not-allowed
+    }
+
+    .btn.sm {
+      padding: 3px 8px;
+      font-size: 10px
+    }
+
+    .btn.ban {
+      border-color: rgba(239, 68, 68, .35);
+      color: var(--red);
+      background: rgba(239, 68, 68, .07)
+    }
+
+    .btn.ban:hover {
+      background: rgba(239, 68, 68, .16)
+    }
+
+    .btn.vip {
+      border-color: rgba(245, 158, 11, .35);
+      color: var(--amber);
+      background: rgba(245, 158, 11, .07)
+    }
+
+    .btn.vip:hover {
+      background: rgba(245, 158, 11, .16)
+    }
+
+    .btn.primary {
+      background: var(--blue);
+      color: #fff;
+      border-color: var(--blue2)
+    }
+
+    .btn.primary:hover {
+      background: var(--blue2)
+    }
+
+    .btn.danger {
+      background: rgba(239, 68, 68, .1);
+      color: var(--red);
+      border-color: rgba(239, 68, 68, .35)
+    }
+
+    .btn.danger:hover {
+      background: rgba(239, 68, 68, .2)
+    }
+
+    /* CHARTS */
+    .charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 0 22px 18px
+    }
+
+    .chart-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px
+    }
+
+    .chart-title {
+      font-size: 10px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 12px
+    }
+
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 90px
+    }
+
+    .bar {
+      flex: 1;
+      border-radius: 2px 2px 0 0;
+      min-height: 2px;
+      cursor: pointer;
+      transition: opacity .2s;
+      opacity: .7
+    }
+
+    .bar:hover {
+      opacity: 1
+    }
+
+    .bar.blue {
+      background: var(--blue)
+    }
+
+    .bar.green {
+      background: var(--green)
+    }
+
+    .bar.amber {
+      background: var(--amber)
+    }
+
+    .platform-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px
+    }
+
+    .platform-row {
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
+
+    .platform-name {
+      font-size: 11px;
+      color: var(--text2);
+      width: 72px;
+      flex-shrink: 0
+    }
+
+    .platform-bar-wrap {
+      flex: 1;
+      background: var(--bg3);
+      border-radius: 2px;
+      height: 6px;
+      overflow: hidden
+    }
+
+    .platform-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width .6s ease
+    }
+
+    .platform-pct {
+      font-size: 10px;
+      color: var(--text3);
+      font-family: var(--mono);
+      width: 32px;
+      text-align: right;
+      flex-shrink: 0
+    }
+
+    /* FORMS */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 16px 22px
+    }
+
+    .action-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px
+    }
+
+    .action-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 12px
+    }
+
+    .form-group {
+      margin-bottom: 11px
+    }
+
+    .form-label {
+      font-size: 11px;
+      color: var(--text3);
+      margin-bottom: 5px;
+      display: block
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: var(--font);
+      outline: none;
+      transition: .15s
+    }
+
+    .form-input:focus {
+      border-color: var(--blue);
+      background: var(--bg)
+    }
+
+    .form-textarea {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 7px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: var(--font);
+      resize: vertical;
+      min-height: 72px;
+      outline: none;
+      transition: .15s
+    }
+
+    .form-textarea:focus {
+      border-color: var(--blue);
+      background: var(--bg)
+    }
+
+    /* TOGGLES */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .toggle-row:last-child {
+      border-bottom: none
+    }
+
+    .toggle-label {
+      font-size: 12px;
+      color: var(--text2)
+    }
+
+    .toggle {
+      width: 34px;
+      height: 19px;
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      transition: .2s;
+      flex-shrink: 0
+    }
+
+    .toggle.on {
+      background: var(--blue)
+    }
+
+    .toggle.off {
+      background: var(--bg3);
+      border: 1px solid var(--border2)
+    }
+
+    .toggle::after {
+      content: '';
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 3px;
+      transition: .2s
+    }
+
+    .toggle.on::after {
+      left: 18px
+    }
+
+    .toggle.off::after {
+      left: 3px
+    }
+
+    /* QUEUE */
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px
+    }
+
+    .queue-item:last-child {
+      border-bottom: none
+    }
+
+    .queue-pos {
+      width: 22px;
+      font-family: var(--mono);
+      color: var(--text3);
+      font-size: 11px;
+      flex-shrink: 0
+    }
+
+    .queue-plat {
+      font-size: 15px;
+      flex-shrink: 0
+    }
+
+    .queue-user {
+      color: var(--blue);
+      font-weight: 500;
+      flex-shrink: 0
+    }
+
+    .queue-url {
+      color: var(--text3);
+      font-family: var(--mono);
+      font-size: 10px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin: 0 6px
+    }
+
+    /* ACTIVITY */
+    .activity-feed {
+      max-height: 200px;
+      overflow-y: auto
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .activity-item:last-child {
+      border-bottom: none
+    }
+
+    .activity-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0
+    }
+
+    .activity-dot.ok {
+      background: var(--green)
+    }
+
+    .activity-dot.err {
+      background: var(--red)
+    }
+
+    .activity-dot.warn {
+      background: var(--amber)
+    }
+
+    .activity-text {
+      font-size: 11px;
+      color: var(--text2);
+      flex: 1;
+      line-height: 1.5
+    }
+
+    .activity-time {
+      font-size: 10px;
+      color: var(--text3);
+      font-family: var(--mono);
+      flex-shrink: 0
+    }
+
+    /* TABS */
+    .tab-bar {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 22px
+    }
+
+    .tab {
+      padding: 11px 15px;
+      font-size: 12px;
+      color: var(--text3);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: .15s;
+      white-space: nowrap
+    }
+
+    .tab.active {
+      color: var(--blue);
+      border-bottom-color: var(--blue)
+    }
+
+    .tab:hover {
+      color: var(--text2)
+    }
+
+    .tab-content {
+      display: none;
+      padding: 16px 22px
+    }
+
+    .tab-content.active {
+      display: block
+    }
+
+    /* MISC */
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .stat-row:last-child {
+      border-bottom: none
+    }
+
+    .stat-key {
+      font-size: 12px;
+      color: var(--text3);
+      width: 160px;
+      flex-shrink: 0
+    }
+
+    .stat-val {
+      font-size: 12px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-weight: 500
+    }
+
+    .search-wrap {
+      padding: 12px 22px 10px
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 9px 13px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font);
+      outline: none;
+      transition: .15s
+    }
+
+    .search-input:focus {
+      border-color: var(--blue)
+    }
+
+    .select {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 6px 9px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: var(--font);
+      outline: none;
+      cursor: pointer;
+      transition: .15s
+    }
+
+    .select:focus {
+      border-color: var(--blue)
+    }
+
+    /* TOAST */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 11px 16px;
+      font-size: 12px;
+      color: var(--text);
+      z-index: 9999;
+      transform: translateY(12px);
+      opacity: 0;
+      transition: all .22s;
+      pointer-events: none;
+      max-width: 300px
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1
+    }
+
+    .toast.ok {
+      border-left: 3px solid var(--green)
+    }
+
+    .toast.err {
+      border-left: 3px solid var(--red)
+    }
+
+    .toast.warn {
+      border-left: 3px solid var(--amber)
+    }
+
+    /* LOADING */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text3);
+      font-size: 13px;
+      gap: 8px
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .empty {
+      padding: 30px;
+      text-align: center;
+      color: var(--text3);
+      font-size: 13px
+    }
+
+    /* SCROLLBAR */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border2);
+      border-radius: 3px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="shell">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🤖</div>
+        <div>
+          <div class="logo-text">Nobita Bot</div>
+          <div class="logo-ver" id="bot-version">v3.0 admin</div>
+        </div>
+      </div>
+      <nav>
+        <div class="nav-section">Main</div>
+        <div class="nav-item active" onclick="gotoPage('overview',this)">
+          <span class="nav-icon">📊</span>Tổng quan<span class="status-dot" id="online-dot" style="display:none"></span>
+        </div>
+        <div class="nav-item" onclick="gotoPage('users',this)"><span class="nav-icon">👥</span>Người dùng</div>
+        <div class="nav-item" onclick="gotoPage('queue',this)"><span class="nav-icon">📋</span>Hàng đợi</div>
+        <div class="nav-section">Quản lý</div>
+        <div class="nav-item" onclick="gotoPage('broadcast',this)"><span class="nav-icon">📢</span>Broadcast</div>
+        <div class="nav-item" onclick="gotoPage('moderation',this)"><span class="nav-icon">🛡️</span>Kiểm duyệt</div>
+        <div class="nav-section">Hệ thống</div>
+        <div class="nav-item" onclick="gotoPage('settings',this)"><span class="nav-icon">⚙️</span>Cài đặt</div>
+        <div class="nav-item" onclick="gotoPage('logs',this)"><span class="nav-icon">📝</span>Nhật ký</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="footer-info" id="sidebar-clock">--:--:--</div>
+        <div class="footer-info" style="margin-top:3px;color:var(--text3)" id="sidebar-date">--</div>
+      </div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+
+      <!-- ===== OVERVIEW ===== -->
+      <div class="page active" id="page-overview">
+        <div class="topbar">
+          <div class="topbar-title">Tổng quan hệ thống</div>
+          <div class="topbar-right">
+            <span class="uptime-badge" id="uptime-display">⬤ Đang kết nối...</span>
+            <span class="badge" id="maint-badge" style="display:none"></span>
+            <button class="btn sm" onclick="loadStats()" title="Làm mới">↻</button>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Tổng requests</div>
+            <div class="metric-val" id="m-total">—</div>
+            <div class="metric-sub" id="m-today">Hôm nay: —</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Tải thành công</div>
+            <div class="metric-val" style="color:var(--green)" id="m-success">—</div>
+            <div class="metric-sub up" id="m-rate">—% tỷ lệ</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Tổng users</div>
+            <div class="metric-val" id="m-users">—</div>
+            <div class="metric-sub" id="m-vip-prem">VIP: — | Premium: —</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Thất bại</div>
+            <div class="metric-val" style="color:var(--red)" id="m-fail">—</div>
+            <div class="metric-sub dn" id="m-banned">Banned: —</div>
+          </div>
+        </div>
+        <div class="charts">
+          <div class="chart-card">
+            <div class="chart-title">Hoạt động 24h (requests/giờ)</div>
+            <div class="bar-chart" id="hourly-chart">
+              <div class="loading">
+                <div class="spinner"></div>
+              </div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Hàng đợi thời gian thực</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+              <div style="background:var(--bg3);border-radius:6px;padding:10px;text-align:center">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:4px">ĐANG XỬ LÝ</div>
+                <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--blue)" id="q-processing">
+                  —</div>
+                <div style="font-size:10px;color:var(--text3)" id="q-max">/ — slots</div>
+              </div>
+              <div style="background:var(--bg3);border-radius:6px;padding:10px;text-align:center">
+                <div style="font-size:10px;color:var(--text3);margin-bottom:4px">ĐANG CHỜ</div>
+                <div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--amber)" id="q-waiting">—
+                </div>
+                <div style="font-size:10px;color:var(--text3)">requests</div>
+              </div>
+            </div>
+            <div style="font-size:10px;color:var(--text3);text-align:center" id="q-updated">Chưa cập nhật</div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Thống kê hệ thống</div>
+            <span style="font-size:10px;color:var(--text3)" id="stats-updated">—</span>
+          </div>
+          <div class="table-wrap" style="padding:12px 16px">
+            <div class="stat-row">
+              <div class="stat-key">Bot version</div>
+              <div class="stat-val" id="s-version">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Uptime</div>
+              <div class="stat-val" id="s-uptime">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Max concurrent</div>
+              <div class="stat-val" id="s-maxcon">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Tải hôm nay</div>
+              <div class="stat-val" id="s-today-dl">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Tỷ lệ thành công</div>
+              <div class="stat-val" id="s-rate">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">VIP users</div>
+              <div class="stat-val" style="color:var(--amber)" id="s-vip">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Premium users</div>
+              <div class="stat-val" style="color:var(--purple)" id="s-premium">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Banned users</div>
+              <div class="stat-val" style="color:var(--red)" id="s-banned">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Muted users</div>
+              <div class="stat-val" id="s-muted">—</div>
+            </div>
+            <div class="stat-row">
+              <div class="stat-key">Chế độ bảo trì</div>
+              <div class="stat-val" id="s-maint">—</div>
+            </div>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-header">
+            <div class="section-title">Biểu đồ hoạt động theo giờ</div>
+          </div>
+          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px">
+            <div
+              style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:6px;font-family:var(--mono)">
+              <span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span>
+            </div>
+            <div class="bar-chart" id="hourly-chart-big" style="height:110px"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== USERS ===== -->
+      <div class="page" id="page-users">
+        <div class="topbar">
+          <div class="topbar-title">Quản lý người dùng</div>
+          <div class="topbar-right">
+            <select class="select" id="user-filter" onchange="filterUsers()">
+              <option value="all">Tất cả</option>
+              <option value="vip">VIP ⭐</option>
+              <option value="premium">Premium 💎</option>
+              <option value="banned">Đã ban 🚫</option>
+              <option value="warned">Có cảnh cáo ⚠️</option>
+            </select>
+            <span class="badge blue" id="user-count-badge">—</span>
+            <button class="btn sm" onclick="loadUsers()">↻ Tải lại</button>
+          </div>
+        </div>
+        <div class="search-wrap">
+          <input class="search-input" placeholder="🔍  Tìm theo tên hoặc User ID..." id="user-search"
+            oninput="filterUsers()">
+        </div>
+        <div class="section" style="padding-top:0">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Người dùng</th>
+                  <th>User ID</th>
+                  <th>Lượt tải</th>
+                  <th>Lần cuối</th>
+                  <th>Cấp bậc</th>
+                  <th>Cảnh cáo</th>
+                  <th>Hành động</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr>
+                  <td colspan="8">
+                    <div class="loading">
+                      <div class="spinner"></div>Đang tải...
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== QUEUE ===== -->
+      <div class="page" id="page-queue">
+        <div class="topbar">
+          <div class="topbar-title">Hàng đợi xử lý</div>
+          <div class="topbar-right">
+            <span class="badge amber" id="queue-badge">—</span>
+            <button class="btn sm" onclick="loadQueuePage()">↻ Làm mới</button>
+            <button class="btn danger" onclick="clearQueue()">🗑️ Xóa hàng đợi</button>
+          </div>
+        </div>
+        <div style="padding:16px 22px 8px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+            <div class="metric">
+              <div class="metric-label">Đang xử lý</div>
+              <div class="metric-val" style="color:var(--blue)" id="qp-processing">—</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Đang chờ</div>
+              <div class="metric-val" style="color:var(--amber)" id="qp-waiting">—</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Tổng hoàn thành</div>
+              <div class="metric-val" style="color:var(--green)" id="qp-done">—</div>
+            </div>
+          </div>
+          <div class="table-wrap" id="queue-list">
+            <div class="loading">
+              <div class="spinner"></div>Đang tải...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== BROADCAST ===== -->
+      <div class="page" id="page-broadcast">
+        <div class="topbar">
+          <div class="topbar-title">Gửi thông báo</div>
+        </div>
+        <div class="actions-grid">
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-title">📢 Broadcast tin nhắn</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="form-group">
+                <label class="form-label">Đối tượng nhận</label>
+                <select class="select" style="width:100%" id="bc-target">
+                  <option value="all">📣 Tất cả người dùng</option>
+                  <option value="vip">⭐ Chỉ VIP</option>
+                  <option value="premium">💎 Chỉ Premium</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Loại thông báo</label>
+                <select class="select" style="width:100%" id="bc-type">
+                  <option value="broadcast">📢 Broadcast thường</option>
+                  <option value="announce">📌 Thông báo quan trọng</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Nội dung (hỗ trợ *bold* _italic_ `code` Markdown)</label>
+              <textarea class="form-textarea" id="bc-msg" style="min-height:100px"
+                placeholder="Nhập nội dung thông báo..."></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+              <button class="btn" onclick="document.getElementById('bc-msg').value=''">Xóa</button>
+              <button class="btn primary" id="bc-btn" onclick="sendBroadcast()">📢 Gửi ngay</button>
+            </div>
+          </div>
+          <div class="action-card">
+            <div class="action-title">💬 Nhắn tin trực tiếp (DM)</div>
+            <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="dm-uid"
+                placeholder="123456789"></div>
+            <div class="form-group"><label class="form-label">Nội dung</label><textarea class="form-textarea"
+                id="dm-msg" style="min-height:100px" placeholder="Nhập tin nhắn..."></textarea></div>
+            <button class="btn primary" id="dm-btn" onclick="sendDM()" style="width:100%">💬 Gửi DM</button>
+          </div>
+          <div class="action-card">
+            <div class="action-title">🔧 Chế độ bảo trì</div>
+            <div
+              style="padding:10px;background:var(--bg3);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--text2)">
+              Trạng thái: <strong id="maint-status-text" style="color:var(--text)">Đang tải...</strong>
+            </div>
+            <div class="form-group"><label class="form-label">Thông báo gửi kèm (tùy chọn)</label>
+              <textarea class="form-textarea" id="maint-msg" style="min-height:55px"
+                placeholder="Bot đang bảo trì, vui lòng quay lại sau..."></textarea>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <button class="btn danger" onclick="doMaintenance('on')" style="width:100%">🔧 Bật bảo trì</button>
+              <button class="btn primary" onclick="doMaintenance('off')" style="width:100%">✅ Tắt bảo trì</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== MODERATION ===== -->
+      <div class="page" id="page-moderation">
+        <div class="topbar">
+          <div class="topbar-title">Kiểm duyệt người dùng</div>
+        </div>
+        <div class="tab-bar">
+          <div class="tab active" onclick="switchTab('mod','ban-tab',this)">🚫 Ban / Mute</div>
+          <div class="tab" onclick="switchTab('mod','vip-tab',this)">⭐ VIP / Premium</div>
+          <div class="tab" onclick="switchTab('mod','warn-tab',this)">⚠️ Cảnh cáo</div>
+          <div class="tab" onclick="switchTab('mod','limit-tab',this)">🚦 Giới hạn</div>
+        </div>
+
+        <div class="tab-content active" id="mod-ban-tab">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="action-card">
+              <div class="action-title">🚫 Ban người dùng</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="ban-uid"
+                  placeholder="123456789"></div>
+              <div class="form-group"><label class="form-label">Lý do</label><input class="form-input" id="ban-reason"
+                  placeholder="Vi phạm quy định..."></div>
+              <button class="btn ban" onclick="adminAction('ban')" style="width:100%">🚫 Ban ngay</button>
+            </div>
+            <div class="action-card">
+              <div class="action-title">✅ Gỡ ban / Mute</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="unban-uid"
+                  placeholder="123456789"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                <button class="btn primary" onclick="adminAction('unban')" style="width:100%">✅ Unban</button>
+                <button class="btn" onclick="adminAction('mute')" style="width:100%">🔇 Mute</button>
+              </div>
+              <button class="btn" onclick="adminAction('unmute')" style="width:100%">🔊 Unmute</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="mod-vip-tab">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="action-card">
+              <div class="action-title">⭐ VIP — không giới hạn tốc độ</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="vip-uid"
+                  placeholder="123456789"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn vip" onclick="adminAction('addvip')" style="width:100%">⭐ Cấp VIP</button>
+                <button class="btn" onclick="adminAction('removevip')" style="width:100%">Xóa VIP</button>
+              </div>
+            </div>
+            <div class="action-card">
+              <div class="action-title">💎 Premium — 6 req/10s</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="prem-uid"
+                  placeholder="123456789"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn"
+                  style="border-color:rgba(168,85,247,.35);color:var(--purple);background:rgba(168,85,247,.07);width:100%"
+                  onclick="adminAction('addprem')">💎 Cấp Premium</button>
+                <button class="btn" onclick="adminAction('remprem')" style="width:100%">Xóa Premium</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="mod-warn-tab">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="action-card">
+              <div class="action-title">⚠️ Cảnh cáo (auto-ban sau 3 lần)</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="warn-uid"
+                  placeholder="123456789"></div>
+              <div class="form-group"><label class="form-label">Lý do</label><input class="form-input" id="warn-reason"
+                  placeholder="Vi phạm quy định..."></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn"
+                  style="border-color:rgba(245,158,11,.35);color:var(--amber);background:rgba(245,158,11,.07);width:100%"
+                  onclick="adminAction('warn')">⚠️ Cảnh cáo</button>
+                <button class="btn" onclick="adminAction('clearwarn')" style="width:100%">Xóa cảnh cáo</button>
+              </div>
+            </div>
+            <div class="action-card">
+              <div class="action-title">⏱️ Slow mode</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="slow-uid"
+                  placeholder="123456789"></div>
+              <div class="form-group"><label class="form-label">Delay giữa mỗi request (giây)</label><input
+                  class="form-input" id="slow-delay" type="number" min="1" max="3600" placeholder="30"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn" onclick="adminAction('slowmode')" style="width:100%">⏱️ Bật chậm</button>
+                <button class="btn" onclick="adminAction('clearslowmode')" style="width:100%">Tắt chậm</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="mod-limit-tab">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="action-card">
+              <div class="action-title">🚦 Giới hạn tùy chỉnh</div>
+              <div class="form-group"><label class="form-label">User ID</label><input class="form-input" id="limit-uid"
+                  placeholder="123456789"></div>
+              <div class="form-group"><label class="form-label">Số req / 10s (0 = chặn hoàn toàn)</label><input
+                  class="form-input" id="limit-val" type="number" min="0" max="100" placeholder="Mặc định: 3"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button class="btn primary" onclick="adminAction('setlimit')" style="width:100%">Áp dụng</button>
+                <button class="btn" onclick="adminAction('resetlimit')" style="width:100%">Reset</button>
+              </div>
+            </div>
+            <div class="action-card">
+              <div class="action-title">📋 Users có giới hạn tùy chỉnh</div>
+              <div id="limits-list" style="font-size:12px;color:var(--text3)">
+                <div class="loading">
+                  <div class="spinner"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SETTINGS ===== -->
+      <div class="page" id="page-settings">
+        <div class="topbar">
+          <div class="topbar-title">Cài đặt hệ thống</div>
+          <div class="topbar-right">
+            <button class="btn sm" onclick="loadSettings()">↻ Tải lại</button>
+            <button class="btn primary" onclick="saveSettings()">💾 Lưu cài đặt</button>
+          </div>
+        </div>
+        <div style="padding:16px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="action-card">
+            <div class="action-title">⚙️ Thông số bot</div>
+            <div class="form-group"><label class="form-label">Max file size (MB)</label><input class="form-input"
+                id="s-maxsize" type="number" placeholder="50"></div>
+            <div class="form-group"><label class="form-label">Rate limit mặc định (req/10s)</label><input
+                class="form-input" id="s-ratelimit" type="number" placeholder="3"></div>
+            <div class="form-group"><label class="form-label">Rate limit window (ms)</label><input class="form-input"
+                id="s-window" type="number" placeholder="10000"></div>
+            <div class="form-group"><label class="form-label">Caption video</label>
+              <textarea class="form-textarea" id="s-caption" style="min-height:55px"
+                placeholder="Caption hiển thị dưới video..."></textarea>
+            </div>
+          </div>
+          <div class="action-card">
+            <div class="action-title">🔧 Tính năng on/off</div>
+            <div class="toggle-row"><span class="toggle-label">Auto-xóa tin nhắn đang xử lý</span>
+              <div class="toggle" id="t-autodel" onclick="toggleSetting(this,'autoDeleteProcessing')"></div>
+            </div>
+            <div class="toggle-row"><span class="toggle-label">Thông báo admin khi lỗi</span>
+              <div class="toggle" id="t-notifyadmin" onclick="toggleSetting(this,'notifyAdmin')"></div>
+            </div>
+          </div>
+          <div class="action-card" style="grid-column:1/-1">
+            <div class="action-title">🗂️ Dữ liệu & Backup</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <a id="export-btn" class="btn" onclick="exportData()">📤 Xuất JSON</a>
+              <button class="btn danger"
+                onclick="if(confirm('Xóa toàn bộ temp files?'))toast('Chạy cleanup trên server','warn')">🧹 Cleanup
+                temp</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== LOGS ===== -->
+      <div class="page" id="page-logs">
+        <div class="topbar">
+          <div class="topbar-title">Nhật ký hoạt động</div>
+          <div class="topbar-right">
+            <select class="select" id="log-filter" onchange="filterLogs()">
+              <option value="all">Tất cả</option>
+              <option value="ok">✅ Thành công</option>
+              <option value="err">❌ Lỗi</option>
+              <option value="warn">⚠️ Cảnh báo</option>
+            </select>
+            <span class="badge blue" id="log-live-badge">● Live</span>
+          </div>
+        </div>
+        <div style="padding:16px 22px">
+          <div class="table-wrap">
+            <div class="activity-feed" id="live-log-feed" style="max-height:500px">
+              <div class="loading">
+                <div class="spinner"></div>Đang tải nhật ký...
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- .content -->
+  </div><!-- .shell -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // =====================================================
+    // CONFIG — lấy token từ URL ?token=xxx
+    // =====================================================
+    const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+    const API = (path) => `${path}?token=${TOKEN}`;
+
+    // =====================================================
+    // API HELPERS
+    // =====================================================
+    async function apiFetch(path, options = {}) {
+      try {
+        const url = options.method && options.method !== 'GET'
+          ? path
+          : API(path);
+        if (options.body && typeof options.body === 'object') {
+          options.body = JSON.stringify({ ...options.body, token: TOKEN });
+          options.headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+        }
+        const res = await fetch(url, options);
+        if (res.status === 401) { toast('❌ Token không hợp lệ', 'err'); return null; }
+        return await res.json();
+      } catch (e) {
+        toast('❌ Lỗi kết nối: ' + e.message, 'err');
+        return null;
+      }
+    }
+
+    // =====================================================
+    // CLOCK
+    // =====================================================
+    function updateClock() {
+      const now = new Date();
+      const pad = n => n.toString().padStart(2, '0');
+      document.getElementById('sidebar-clock').textContent =
+        `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+      document.getElementById('sidebar-date').textContent =
+        now.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // =====================================================
+    // FORMAT HELPERS
+    // =====================================================
+    function formatUptime(seconds) {
+      const s = Math.floor(seconds);
+      const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600),
+        m = Math.floor((s % 3600) / 60), sec = s % 60;
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m ${sec}s`;
+      return `${m}m ${sec}s`;
+    }
+    function formatTime(ts) {
+      return new Date(ts).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+    }
+    function num(n) { return Number(n || 0).toLocaleString('vi-VN'); }
+
+    // =====================================================
+    // LOAD STATS (overview)
+    // =====================================================
+    async function loadStats() {
+      const data = await apiFetch('/api/stats');
+      if (!data) return;
+
+      // metrics
+      document.getElementById('m-total').textContent = num(data.totalRequests);
+      document.getElementById('m-success').textContent = num(data.successfulDownloads);
+      document.getElementById('m-users').textContent = num(data.totalUsers);
+      document.getElementById('m-fail').textContent = num(data.failedDownloads);
+      document.getElementById('m-today').textContent = `Hôm nay: ${num(data.dailyStats?.requests || 0)} requests`;
+      document.getElementById('m-rate').textContent = `${data.successRate}% tỷ lệ`;
+      document.getElementById('m-vip-prem').textContent = `VIP: ${data.vipUsers} | Premium: ${data.premiumUsers}`;
+      document.getElementById('m-banned').textContent = `Banned: ${data.bannedUsers}`;
+
+      // queue
+      document.getElementById('q-processing').textContent = data.processing;
+      document.getElementById('q-max').textContent = `/ ${data.maxConcurrent} slots`;
+      document.getElementById('q-waiting').textContent = data.queueLength;
+      document.getElementById('q-updated').textContent = `Cập nhật: ${new Date().toLocaleTimeString('vi-VN')}`;
+
+      // system stats
+      document.getElementById('s-version').textContent = data.version || '—';
+      document.getElementById('s-uptime').textContent = formatUptime(data.uptime || 0);
+      document.getElementById('s-maxcon').textContent = data.maxConcurrent || '—';
+      document.getElementById('s-today-dl').textContent = num(data.dailyStats?.downloads || 0);
+      document.getElementById('s-rate').textContent = `${data.successRate}%`;
+      document.getElementById('s-vip').textContent = `${data.vipUsers} ⭐`;
+      document.getElementById('s-premium').textContent = `${data.premiumUsers} 💎`;
+      document.getElementById('s-banned').textContent = `${data.bannedUsers} 🚫`;
+      document.getElementById('s-muted').textContent = data.mutedUsers || 0;
+      document.getElementById('s-maint').textContent = data.maintenanceMode ? '🔧 BẬT' : '✅ TẮT';
+
+      // uptime badge
+      document.getElementById('uptime-display').textContent = `⬤ ONLINE ${formatUptime(data.uptime || 0)}`;
+      document.getElementById('online-dot').style.display = 'block';
+
+      // maintenance badge
+      const mb = document.getElementById('maint-badge');
+      if (data.maintenanceMode) {
+        mb.textContent = '🔧 BẢO TRÌ'; mb.className = 'badge amber'; mb.style.display = '';
+      } else { mb.style.display = 'none'; }
+
+      // broadcast page status
+      const ms = document.getElementById('maint-status-text');
+      if (ms) ms.textContent = data.maintenanceMode ? '🔧 Đang bảo trì' : '✅ Hoạt động bình thường';
+
+      // hourly chart
+      if (data.hourlyStats) {
+        buildHourlyChart('hourly-chart', data.hourlyStats, 90);
+        buildHourlyChart('hourly-chart-big', data.hourlyStats, 110);
+      }
+
+      document.getElementById('stats-updated').textContent = `Cập nhật ${new Date().toLocaleTimeString('vi-VN')}`;
+    }
+
+    // =====================================================
+    // HOURLY CHART
+    // =====================================================
+    function buildHourlyChart(id, data, height = 90) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const max = Math.max(...data, 1);
+      const now = new Date().getHours();
+      el.style.height = height + 'px';
+      el.innerHTML = data.map((v, i) => {
+        const h = Math.max(Math.round((v / max) * 100), v > 0 ? 2 : 0);
+        const cls = i === now ? 'bar amber' : i < now ? 'bar blue' : 'bar green';
+        return `<div class="${cls}" style="height:${h}%" title="${i}:00 — ${v} requests"></div>`;
+      }).join('');
+    }
+
+    // =====================================================
+    // LOAD USERS
+    // =====================================================
+    let allUsers = [];
+
+    async function loadUsers() {
+      document.getElementById('users-tbody').innerHTML =
+        '<tr><td colspan="8"><div class="loading"><div class="spinner"></div>Đang tải dữ liệu thật...</div></td></tr>';
+      const data = await apiFetch('/api/users');
+      if (!data) return;
+      allUsers = data;
+      filterUsers();
+    }
+
+    function filterUsers() {
+      const filter = document.getElementById('user-filter').value;
+      const search = document.getElementById('user-search').value.toLowerCase().trim();
+      const data = allUsers.filter(u => {
+        const matchSearch = !search ||
+          (u.username || '').toLowerCase().includes(search) ||
+          String(u.id).includes(search);
+        if (!matchSearch) return false;
+        if (filter === 'vip') return u.isVip;
+        if (filter === 'premium') return u.isPremium;
+        if (filter === 'banned') return u.isBanned;
+        if (filter === 'warned') return (u.warnings || 0) > 0;
+        return true;
+      });
+      buildUsersTable(data);
+      document.getElementById('user-count-badge').textContent = data.length + ' users';
+    }
+
+    function buildUsersTable(data) {
+      const t = document.getElementById('users-tbody');
+      if (!data.length) {
+        t.innerHTML = '<tr><td colspan="8"><div class="empty">📭 Không có dữ liệu</div></td></tr>';
+        return;
+      }
+      const tierBadge = (u) => {
+        if (u.isBanned) return '<span class="badge red">🚫 Ban</span>';
+        if (u.isVip) return '<span class="badge amber">⭐ VIP</span>';
+        if (u.isPremium) return '<span class="badge purple">💎 Premium</span>';
+        if ((u.warnings || 0) >= 3) return '<span class="badge red">⚠️ Danger</span>';
+        return '<span class="badge gray">User</span>';
+      };
+      const warnCell = w => w > 0
+        ? `<span style="color:var(--amber);font-weight:500">${w}/3</span>`
+        : '<span style="color:var(--text3)">—</span>';
+      const lastUsed = u => u.lastUsed
+        ? new Date(u.lastUsed).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+        : '—';
+
+      t.innerHTML = data.map((u, i) => `
     <tr>
-      <td style="color:var(--text3);font-family:var(--mono)">${i+1}</td>
-      <td><span class="user-name">@${u.username||'unknown'}</span></td>
+      <td style="color:var(--text3);font-family:var(--mono)">${i + 1}</td>
+      <td><span class="user-name">@${u.username || 'unknown'}</span></td>
       <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${u.id}</td>
       <td style="font-family:var(--mono)">${num(u.count)}</td>
       <td style="font-size:11px;color:var(--text3)">${lastUsed(u)}</td>
       <td>${tierBadge(u)}</td>
-      <td>${warnCell(u.warnings||0)}</td>
+      <td>${warnCell(u.warnings || 0)}</td>
       <td><div style="display:flex;gap:5px">
-        <button class="btn sm vip" onclick="quickVip('${u.id}','${u.username}',${u.isVip})" title="${u.isVip?'Xóa VIP':'Cấp VIP'}">⭐</button>
-        <button class="btn sm ban" onclick="quickBan('${u.id}','${u.username}',${u.isBanned})">${u.isBanned?'Unban':'Ban'}</button>
+        <button class="btn sm vip" onclick="quickVip('${u.id}','${u.username}',${u.isVip})" title="${u.isVip ? 'Xóa VIP' : 'Cấp VIP'}">⭐</button>
+        <button class="btn sm ban" onclick="quickBan('${u.id}','${u.username}',${u.isBanned})">${u.isBanned ? 'Unban' : 'Ban'}</button>
       </div></td>
     </tr>`).join('');
-}
+    }
 
-// =====================================================
-// LOAD QUEUE PAGE
-// =====================================================
-async function loadQueuePage() {
-  const data = await apiFetch('/api/stats');
-  if (!data) return;
-  document.getElementById('qp-processing').textContent = data.processing;
-  document.getElementById('qp-waiting').textContent = data.queueLength;
-  document.getElementById('qp-done').textContent = num(data.successfulDownloads);
-  document.getElementById('queue-badge').textContent = data.queueLength + ' chờ';
+    // =====================================================
+    // LOAD QUEUE PAGE
+    // =====================================================
+    async function loadQueuePage() {
+      const data = await apiFetch('/api/stats');
+      if (!data) return;
+      document.getElementById('qp-processing').textContent = data.processing;
+      document.getElementById('qp-waiting').textContent = data.queueLength;
+      document.getElementById('qp-done').textContent = num(data.successfulDownloads);
+      document.getElementById('queue-badge').textContent = data.queueLength + ' chờ';
 
-  const el = document.getElementById('queue-list');
-  if (data.queueLength === 0 && data.processing === 0) {
-    el.innerHTML = '<div class="empty">📭 Hàng đợi trống</div>';
-  } else {
-    el.innerHTML = `<div style="padding:12px 16px;font-size:12px;color:var(--text2)">
+      const el = document.getElementById('queue-list');
+      if (data.queueLength === 0 && data.processing === 0) {
+        el.innerHTML = '<div class="empty">📭 Hàng đợi trống</div>';
+      } else {
+        el.innerHTML = `<div style="padding:12px 16px;font-size:12px;color:var(--text2)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <div class="spinner"></div>
         <span><strong style="color:var(--blue)">${data.processing}</strong> đang xử lý — <strong style="color:var(--amber)">${data.queueLength}</strong> đang chờ</span>
       </div>
       <div style="color:var(--text3);font-size:11px">Chi tiết hàng đợi không expose qua API. Xem console server để biết thêm.</div>
     </div>`;
-  }
-}
+      }
+    }
 
-// =====================================================
-// LOAD SETTINGS
-// =====================================================
-async function loadSettings() {
-  const data = await apiFetch('/api/admin/settings');
-  if (!data) return;
-  if (data.maxFileSizeMB !== undefined) document.getElementById('s-maxsize').value = data.maxFileSizeMB;
-  if (data.defaultRateLimit !== undefined) document.getElementById('s-ratelimit').value = data.defaultRateLimit;
-  if (data.rateLimitWindow !== undefined) document.getElementById('s-window').value = data.rateLimitWindow;
-  if (data.captionText !== undefined) document.getElementById('s-caption').value = data.captionText;
-  setToggle('t-autodel', data.autoDeleteProcessing);
-  setToggle('t-notifyadmin', data.notifyAdmin);
-}
+    // =====================================================
+    // LOAD SETTINGS
+    // =====================================================
+    async function loadSettings() {
+      const data = await apiFetch('/api/admin/settings');
+      if (!data) return;
+      if (data.maxFileSizeMB !== undefined) document.getElementById('s-maxsize').value = data.maxFileSizeMB;
+      if (data.defaultRateLimit !== undefined) document.getElementById('s-ratelimit').value = data.defaultRateLimit;
+      if (data.rateLimitWindow !== undefined) document.getElementById('s-window').value = data.rateLimitWindow;
+      if (data.captionText !== undefined) document.getElementById('s-caption').value = data.captionText;
+      setToggle('t-autodel', data.autoDeleteProcessing);
+      setToggle('t-notifyadmin', data.notifyAdmin);
+    }
 
-function setToggle(id, val) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.className = 'toggle ' + (val ? 'on' : 'off');
-}
+    function setToggle(id, val) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = 'toggle ' + (val ? 'on' : 'off');
+    }
 
-async function saveSettings() {
-  const body = {
-    maxFileSizeMB: parseInt(document.getElementById('s-maxsize').value) || 50,
-    defaultRateLimit: parseInt(document.getElementById('s-ratelimit').value) || 3,
-    rateLimitWindow: parseInt(document.getElementById('s-window').value) || 10000,
-    captionText: document.getElementById('s-caption').value,
-    autoDeleteProcessing: document.getElementById('t-autodel').classList.contains('on'),
-    notifyAdmin: document.getElementById('t-notifyadmin').classList.contains('on'),
-  };
-  const res = await apiFetch('/api/admin/settings', {method:'POST', body});
-  if (res?.success) toast('💾 Cài đặt đã được lưu','ok');
-  else toast('❌ Lưu thất bại','err');
-}
+    async function saveSettings() {
+      const body = {
+        maxFileSizeMB: parseInt(document.getElementById('s-maxsize').value) || 50,
+        defaultRateLimit: parseInt(document.getElementById('s-ratelimit').value) || 3,
+        rateLimitWindow: parseInt(document.getElementById('s-window').value) || 10000,
+        captionText: document.getElementById('s-caption').value,
+        autoDeleteProcessing: document.getElementById('t-autodel').classList.contains('on'),
+        notifyAdmin: document.getElementById('t-notifyadmin').classList.contains('on'),
+      };
+      const res = await apiFetch('/api/admin/settings', { method: 'POST', body });
+      if (res?.success) toast('💾 Cài đặt đã được lưu', 'ok');
+      else toast('❌ Lưu thất bại', 'err');
+    }
 
-function toggleSetting(el, key) {
-  el.classList.toggle('on');
-  el.classList.toggle('off');
-  toast((el.classList.contains('on') ? '✅ Bật: ' : '⛔ Tắt: ') + key, 'ok');
-}
+    function toggleSetting(el, key) {
+      el.classList.toggle('on');
+      el.classList.toggle('off');
+      toast((el.classList.contains('on') ? '✅ Bật: ' : '⛔ Tắt: ') + key, 'ok');
+    }
 
-// =====================================================
-// LIVE LOG — poll /api/stats mỗi 5s để cập nhật
-// =====================================================
-const liveLog = [];
+    // =====================================================
+    // LIVE LOG — poll /api/stats mỗi 5s để cập nhật
+    // =====================================================
+    let liveLog = []; // Allow reassignment
 
-async function pollLiveLogs() {
-  // Dùng /api/stats để cập nhật số liệu realtime
-  const data = await apiFetch('/api/stats');
-  if (!data) return;
+    async function pollLiveLogs() {
+      // Dùng /api/stats để cập nhật số liệu realtime
+      const data = await apiFetch('/api/stats');
+      if (!data) return;
 
-  // Cập nhật queue overlay trên overview
-  if (document.getElementById('page-overview').classList.contains('active')) {
-    document.getElementById('q-processing').textContent = data.processing;
-    document.getElementById('q-waiting').textContent = data.queueLength;
-    document.getElementById('q-updated').textContent = `Cập nhật: ${new Date().toLocaleTimeString('vi-VN')}`;
-    document.getElementById('s-uptime').textContent = formatUptime(data.uptime||0);
-    document.getElementById('uptime-display').textContent = `⬤ ONLINE ${formatUptime(data.uptime||0)}`;
-  }
+      // Cập nhật queue overlay trên overview
+      if (document.getElementById('page-overview').classList.contains('active')) {
+        document.getElementById('q-processing').textContent = data.processing;
+        document.getElementById('q-waiting').textContent = data.queueLength;
+        document.getElementById('q-updated').textContent = `Cập nhật: ${new Date().toLocaleTimeString('vi-VN')}`;
+        document.getElementById('s-uptime').textContent = formatUptime(data.uptime || 0);
+        document.getElementById('uptime-display').textContent = `⬤ ONLINE ${formatUptime(data.uptime || 0)}`;
+      }
 
-  // Log entry tổng hợp
-  const now = new Date();
-  const entry = {
-    time: now.toLocaleTimeString('vi-VN'),
-    type: 'ok',
-    text: `Stats — Requests: ${data.totalRequests} | Downloads: ${data.successfulDownloads} | Queue: ${data.processing} xử lý / ${data.queueLength} chờ`
-  };
-  liveLog.unshift(entry);
-  if (liveLog.length > 100) liveLog.pop();
+      // Lấy nhật ký hoạt động từ server
+      if (data.activityLogs) {
+        liveLog = data.activityLogs;
+      }
 
-  if (document.getElementById('page-logs').classList.contains('active')) {
-    renderLiveLogs();
-  }
-}
+      if (document.getElementById('page-logs').classList.contains('active')) {
+        renderLiveLogs();
+      }
+    }
 
-function renderLiveLogs() {
-  const feed = document.getElementById('live-log-feed');
-  if (!feed) return;
-  const filter = document.getElementById('log-filter').value;
-  const data = filter === 'all' ? liveLog : liveLog.filter(l => l.type === filter);
-  if (!data.length) {
-    feed.innerHTML = '<div class="empty">📭 Chưa có nhật ký</div>';
-    return;
-  }
-  feed.innerHTML = data.map(l => `
+    function renderLiveLogs() {
+      const feed = document.getElementById('live-log-feed');
+      if (!feed) return;
+      const filter = document.getElementById('log-filter').value;
+      const data = filter === 'all' ? liveLog : liveLog.filter(l => l.type === filter);
+      if (!data.length) {
+        feed.innerHTML = '<div class="empty">📭 Chưa có nhật ký</div>';
+        return;
+      }
+      feed.innerHTML = data.map(l => `
     <div class="activity-item">
       <div class="activity-dot ${l.type}"></div>
       <span class="activity-text">${l.text}</span>
       <span class="activity-time">${l.time}</span>
     </div>`).join('');
-}
+    }
 
-function filterLogs() { renderLiveLogs(); }
+    function filterLogs() { renderLiveLogs(); }
 
-// =====================================================
-// LIMITS LIST
-// =====================================================
-async function loadLimitsList() {
-  const users = await apiFetch('/api/users');
-  if (!users) return;
-  const limited = users.filter(u => u.rateLimit !== null && u.rateLimit !== undefined);
-  const el = document.getElementById('limits-list');
-  if (!el) return;
-  if (!limited.length) {
-    el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Không có giới hạn tùy chỉnh</div>';
-    return;
-  }
-  el.innerHTML = limited.map(u => `
+    // =====================================================
+    // LIMITS LIST
+    // =====================================================
+    async function loadLimitsList() {
+      const users = await apiFetch('/api/users');
+      if (!users) return;
+      const limited = users.filter(u => u.rateLimit !== null && u.rateLimit !== undefined);
+      const el = document.getElementById('limits-list');
+      if (!el) return;
+      if (!limited.length) {
+        el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px 0">Không có giới hạn tùy chỉnh</div>';
+        return;
+      }
+      el.innerHTML = limited.map(u => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
       <span style="color:var(--text2)">@${u.username}</span>
       ${u.rateLimit === 0
-        ? '<span class="badge red">🚫 CHẶN</span>'
-        : `<span class="badge amber">${u.rateLimit}/10s</span>`}
+          ? '<span class="badge red">🚫 CHẶN</span>'
+          : `<span class="badge amber">${u.rateLimit}/10s</span>`}
     </div>`).join('');
-}
+    }
 
-// =====================================================
-// NAVIGATION
-// =====================================================
-function gotoPage(id, el) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + id)?.classList.add('active');
-  el?.classList.add('active');
-  if (id === 'users') loadUsers();
-  if (id === 'queue') loadQueuePage();
-  if (id === 'settings') loadSettings();
-  if (id === 'logs') renderLiveLogs();
-  if (id === 'moderation') loadLimitsList();
-}
+    // =====================================================
+    // NAVIGATION
+    // =====================================================
+    function gotoPage(id, el) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById('page-' + id)?.classList.add('active');
+      el?.classList.add('active');
+      if (id === 'users') loadUsers();
+      if (id === 'queue') loadQueuePage();
+      if (id === 'settings') loadSettings();
+      if (id === 'logs') renderLiveLogs();
+      if (id === 'moderation') loadLimitsList();
+    }
 
-function switchTab(prefix, id, el) {
-  el.closest('.tab-bar').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('[id^="' + prefix + '-"]').forEach(t => t.classList.remove('active'));
-  document.getElementById(id)?.classList.add('active');
-  el?.classList.add('active');
-}
+    function switchTab(prefix, id, el) {
+      el.closest('.tab-bar').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('[id^="' + prefix + '-"]').forEach(t => t.classList.remove('active'));
+      document.getElementById(id)?.classList.add('active');
+      el?.classList.add('active');
+    }
 
-// =====================================================
-// TOAST
-// =====================================================
-let toastTimer;
-function toast(msg, type='ok') {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast ' + type + ' show';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
-}
+    // =====================================================
+    // TOAST
+    // =====================================================
+    let toastTimer;
+    function toast(msg, type = 'ok') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + type + ' show';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
-// =====================================================
-// ADMIN ACTIONS → gọi API thật
-// =====================================================
-const ACTION_CFG = {
-  ban:          {endpoint:'/api/admin/ban',      getBody:()=>({userId:v('ban-uid'),  reason:v('ban-reason')}),   success:'🚫 Đã ban'},
-  unban:        {endpoint:'/api/admin/unban',    getBody:()=>({userId:v('unban-uid')}),                          success:'✅ Đã unban'},
-  mute:         {endpoint:'/api/admin/mute',     getBody:()=>({userId:v('unban-uid')}),                          success:'🔇 Đã mute'},
-  unmute:       {endpoint:'/api/admin/unmute',   getBody:()=>({userId:v('unban-uid')}),                          success:'🔊 Đã unmute'},
-  addvip:       {endpoint:'/api/admin/vip',      getBody:()=>({userId:v('vip-uid'),  action:'add'}),             success:'⭐ Đã cấp VIP'},
-  removevip:    {endpoint:'/api/admin/vip',      getBody:()=>({userId:v('vip-uid'),  action:'remove'}),          success:'Đã xóa VIP'},
-  addprem:      {endpoint:'/api/admin/vip',      getBody:()=>({userId:v('prem-uid'), action:'addprem'}),         success:'💎 Đã cấp Premium'},
-  remprem:      {endpoint:'/api/admin/vip',      getBody:()=>({userId:v('prem-uid'), action:'remprem'}),         success:'Đã xóa Premium'},
-  warn:         {endpoint:'/api/admin/warn',     getBody:()=>({userId:v('warn-uid'), reason:v('warn-reason')}),  success:'⚠️ Đã cảnh cáo'},
-  clearwarn:    {endpoint:'/api/admin/clearwarnings',getBody:()=>({userId:v('warn-uid')}),                       success:'Đã xóa cảnh cáo'},
-  slowmode:     {endpoint:'/api/admin/slowmode', getBody:()=>({userId:v('slow-uid'), delay:(parseInt(v('slow-delay'))||30)*1000}), success:'⏱️ Bật slowmode'},
-  clearslowmode:{endpoint:'/api/admin/slowmode', getBody:()=>({userId:v('slow-uid')}), method:'DELETE',          success:'Tắt slowmode'},
-  setlimit:     {endpoint:'/api/admin/ban',      getBody:()=>({userId:v('limit-uid')}),                          success:'🚦 Áp dụng giới hạn'},
-  resetlimit:   {endpoint:'/api/admin/ban',      getBody:()=>({userId:v('limit-uid')}),                          success:'Reset giới hạn'},
-};
+    // =====================================================
+    // ADMIN ACTIONS → gọi API thật
+    // =====================================================
+    const ACTION_CFG = {
+      ban: { endpoint: '/api/admin/ban', getBody: () => ({ userId: v('ban-uid'), reason: v('ban-reason') }), success: '🚫 Đã ban' },
+      unban: { endpoint: '/api/admin/unban', getBody: () => ({ userId: v('unban-uid') }), success: '✅ Đã unban' },
+      mute: { endpoint: '/api/admin/mute', getBody: () => ({ userId: v('unban-uid') }), success: '🔇 Đã mute' },
+      unmute: { endpoint: '/api/admin/unmute', getBody: () => ({ userId: v('unban-uid') }), success: '🔊 Đã unmute' },
+      addvip: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('vip-uid'), action: 'add' }), success: '⭐ Đã cấp VIP' },
+      removevip: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('vip-uid'), action: 'remove' }), success: 'Đã xóa VIP' },
+      addprem: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('prem-uid'), action: 'addprem' }), success: '💎 Đã cấp Premium' },
+      remprem: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('prem-uid'), action: 'remprem' }), success: 'Đã xóa Premium' },
+      warn: { endpoint: '/api/admin/warn', getBody: () => ({ userId: v('warn-uid'), reason: v('warn-reason') }), success: '⚠️ Đã cảnh cáo' },
+      clearwarn: { endpoint: '/api/admin/clearwarnings', getBody: () => ({ userId: v('warn-uid') }), success: 'Đã xóa cảnh cáo' },
+      slowmode: { endpoint: '/api/admin/slowmode', getBody: () => ({ userId: v('slow-uid'), delay: (parseInt(v('slow-delay')) || 30) * 1000 }), success: '⏱️ Bật slowmode' },
+      clearslowmode: { endpoint: '/api/admin/slowmode', getBody: () => ({ userId: v('slow-uid') }), method: 'DELETE', success: 'Tắt slowmode' },
+      setlimit: { endpoint: '/api/admin/ban', getBody: () => ({ userId: v('limit-uid') }), success: '🚦 Áp dụng giới hạn' },
+      resetlimit: { endpoint: '/api/admin/ban', getBody: () => ({ userId: v('limit-uid') }), success: 'Reset giới hạn' },
+    };
 
-function v(id) { return (document.getElementById(id)||{}).value?.trim()||''; }
+    function v(id) { return (document.getElementById(id) || {}).value?.trim() || ''; }
 
-async function adminAction(action) {
-  const cfg = ACTION_CFG[action];
-  if (!cfg) return;
-  const body = cfg.getBody();
-  if (!body.userId) { toast('⚠️ Vui lòng nhập User ID','err'); return; }
+    async function adminAction(action) {
+      const cfg = ACTION_CFG[action];
+      if (!cfg) return;
+      const body = cfg.getBody();
+      if (!body.userId) { toast('⚠️ Vui lòng nhập User ID', 'err'); return; }
 
-  // setlimit / resetlimit dùng endpoint riêng
-  let endpoint = cfg.endpoint;
-  if (action === 'setlimit') endpoint = '/api/admin/setlimit';
-  if (action === 'resetlimit') endpoint = '/api/admin/resetlimit';
-  if (action === 'addprem') { endpoint = '/api/admin/premium'; body.action = undefined; }
-  if (action === 'remprem') { endpoint = '/api/admin/premium'; body.action = 'remove'; }
+      // setlimit / resetlimit dùng endpoint riêng
+      let endpoint = cfg.endpoint;
+      if (action === 'setlimit') endpoint = '/api/admin/setlimit';
+      if (action === 'resetlimit') endpoint = '/api/admin/resetlimit';
+      if (action === 'addprem') { endpoint = '/api/admin/premium'; body.action = undefined; }
+      if (action === 'remprem') { endpoint = '/api/admin/premium'; body.action = 'remove'; }
 
-  const method = cfg.method || 'POST';
-  let res;
-  if (method === 'DELETE') {
-    res = await apiFetch(`${endpoint}/${body.userId}${API('')}`, {method:'DELETE'});
-  } else {
-    res = await apiFetch(endpoint, {method, body});
-  }
-  if (res?.success !== false) {
-    toast(cfg.success + ' ID: ' + body.userId, 'ok');
-    loadLimitsList();
-  } else {
-    toast('❌ Lỗi: ' + (res?.error||'Unknown'), 'err');
-  }
-}
+      const method = cfg.method || 'POST';
+      let res;
+      if (method === 'DELETE') {
+        res = await apiFetch(`${endpoint}/${body.userId}${API('')}`, { method: 'DELETE' });
+      } else {
+        res = await apiFetch(endpoint, { method, body });
+      }
+      if (res?.success !== false) {
+        toast(cfg.success + ' ID: ' + body.userId, 'ok');
+        loadLimitsList();
+      } else {
+        toast('❌ Lỗi: ' + (res?.error || 'Unknown'), 'err');
+      }
+    }
 
-async function quickBan(id, name, isBanned) {
-  if (!confirm(`${isBanned?'Gỡ ban':'Ban'} @${name} (ID: ${id})?`)) return;
-  const endpoint = isBanned ? '/api/admin/unban' : '/api/admin/ban';
-  const res = await apiFetch(endpoint, {method:'POST', body:{userId:id}});
-  if (res?.success !== false) {
-    toast(`${isBanned?'✅ Đã unban':'🚫 Đã ban'} @${name}`, 'ok');
-    loadUsers();
-  } else toast('❌ Lỗi', 'err');
-}
+    async function quickBan(id, name, isBanned) {
+      if (!confirm(`${isBanned ? 'Gỡ ban' : 'Ban'} @${name} (ID: ${id})?`)) return;
+      const endpoint = isBanned ? '/api/admin/unban' : '/api/admin/ban';
+      const res = await apiFetch(endpoint, { method: 'POST', body: { userId: id } });
+      if (res?.success !== false) {
+        toast(`${isBanned ? '✅ Đã unban' : '🚫 Đã ban'} @${name}`, 'ok');
+        loadUsers();
+      } else toast('❌ Lỗi', 'err');
+    }
 
-async function quickVip(id, name, isVip) {
-  if (!confirm(`${isVip?'Xóa VIP':'Cấp VIP'} cho @${name} (ID: ${id})?`)) return;
-  const res = await apiFetch('/api/admin/vip', {method:'POST', body:{userId:id, action: isVip?'remove':'add'}});
-  if (res?.success !== false) {
-    toast(`${isVip?'Đã xóa VIP':'⭐ Đã cấp VIP'} @${name}`, 'ok');
-    loadUsers();
-  } else toast('❌ Lỗi', 'err');
-}
+    async function quickVip(id, name, isVip) {
+      if (!confirm(`${isVip ? 'Xóa VIP' : 'Cấp VIP'} cho @${name} (ID: ${id})?`)) return;
+      const res = await apiFetch('/api/admin/vip', { method: 'POST', body: { userId: id, action: isVip ? 'remove' : 'add' } });
+      if (res?.success !== false) {
+        toast(`${isVip ? 'Đã xóa VIP' : '⭐ Đã cấp VIP'} @${name}`, 'ok');
+        loadUsers();
+      } else toast('❌ Lỗi', 'err');
+    }
 
-async function clearQueue() {
-  if (!confirm('Xóa toàn bộ hàng đợi?')) return;
-  const res = await apiFetch('/api/admin/clearqueue', {method:'POST', body:{}});
-  if (res?.success !== false) { toast('🗑️ Đã xóa hàng đợi','ok'); loadQueuePage(); }
-  else toast('❌ Lỗi','err');
-}
+    async function clearQueue() {
+      if (!confirm('Xóa toàn bộ hàng đợi?')) return;
+      const res = await apiFetch('/api/admin/clearqueue', { method: 'POST', body: {} });
+      if (res?.success !== false) { toast('🗑️ Đã xóa hàng đợi', 'ok'); loadQueuePage(); }
+      else toast('❌ Lỗi', 'err');
+    }
 
-// =====================================================
-// BROADCAST
-// =====================================================
-async function sendBroadcast() {
-  const msg = document.getElementById('bc-msg').value.trim();
-  if (!msg) { toast('⚠️ Vui lòng nhập nội dung','err'); return; }
-  const target = document.getElementById('bc-target').value;
-  const type = document.getElementById('bc-type').value;
-  const btn = document.getElementById('bc-btn');
-  btn.disabled = true; btn.textContent = '⏳ Đang gửi...';
+    // =====================================================
+    // BROADCAST
+    // =====================================================
+    async function sendBroadcast() {
+      const msg = document.getElementById('bc-msg').value.trim();
+      if (!msg) { toast('⚠️ Vui lòng nhập nội dung', 'err'); return; }
+      const target = document.getElementById('bc-target').value;
+      const type = document.getElementById('bc-type').value;
+      const btn = document.getElementById('bc-btn');
+      btn.disabled = true; btn.textContent = '⏳ Đang gửi...';
 
-  const endpoint = type === 'announce' ? '/api/admin/announce' : '/api/admin/broadcast';
-  const res = await apiFetch(endpoint, {method:'POST', body:{message:msg, target}});
-  btn.disabled = false; btn.textContent = '📢 Gửi ngay';
-  if (res?.success !== false) {
-    toast('📢 Đã gửi broadcast thành công','ok');
-    document.getElementById('bc-msg').value = '';
-  } else toast('❌ Gửi thất bại','err');
-}
+      const endpoint = type === 'announce' ? '/api/admin/announce' : '/api/admin/broadcast';
+      const res = await apiFetch(endpoint, { method: 'POST', body: { message: msg, target } });
+      btn.disabled = false; btn.textContent = '📢 Gửi ngay';
+      if (res?.success !== false) {
+        toast('📢 Đã gửi broadcast thành công', 'ok');
+        document.getElementById('bc-msg').value = '';
+      } else toast('❌ Gửi thất bại', 'err');
+    }
 
-async function sendDM() {
-  const uid = document.getElementById('dm-uid').value.trim();
-  const msg = document.getElementById('dm-msg').value.trim();
-  if (!uid) { toast('⚠️ Cần nhập User ID','err'); return; }
-  if (!msg) { toast('⚠️ Cần nhập nội dung','err'); return; }
-  const btn = document.getElementById('dm-btn');
-  btn.disabled = true; btn.textContent = '⏳ Đang gửi...';
-  const res = await apiFetch('/api/admin/dm', {method:'POST', body:{userId:uid, message:msg}});
-  btn.disabled = false; btn.textContent = '💬 Gửi DM';
-  if (res?.success) { toast('💬 DM đã gửi tới ID: ' + uid,'ok'); document.getElementById('dm-msg').value=''; }
-  else toast('❌ Gửi thất bại: ' + (res?.error||''), 'err');
-}
+    async function sendDM() {
+      const uid = document.getElementById('dm-uid').value.trim();
+      const msg = document.getElementById('dm-msg').value.trim();
+      if (!uid) { toast('⚠️ Cần nhập User ID', 'err'); return; }
+      if (!msg) { toast('⚠️ Cần nhập nội dung', 'err'); return; }
+      const btn = document.getElementById('dm-btn');
+      btn.disabled = true; btn.textContent = '⏳ Đang gửi...';
+      const res = await apiFetch('/api/admin/dm', { method: 'POST', body: { userId: uid, message: msg } });
+      btn.disabled = false; btn.textContent = '💬 Gửi DM';
+      if (res?.success) { toast('💬 DM đã gửi tới ID: ' + uid, 'ok'); document.getElementById('dm-msg').value = ''; }
+      else toast('❌ Gửi thất bại: ' + (res?.error || ''), 'err');
+    }
 
-async function doMaintenance(state) {
-  const res = await apiFetch('/api/admin/maintenance', {method:'POST', body:{status:state}});
-  if (res?.success) {
-    toast(state==='on' ? '🔧 Đã bật bảo trì' : '✅ Đã tắt bảo trì', 'ok');
-    const el = document.getElementById('maint-status-text');
-    if (el) el.textContent = state==='on' ? '🔧 Đang bảo trì' : '✅ Hoạt động bình thường';
+    async function doMaintenance(state) {
+      const res = await apiFetch('/api/admin/maintenance', { method: 'POST', body: { status: state } });
+      if (res?.success) {
+        toast(state === 'on' ? '🔧 Đã bật bảo trì' : '✅ Đã tắt bảo trì', 'ok');
+        const el = document.getElementById('maint-status-text');
+        if (el) el.textContent = state === 'on' ? '🔧 Đang bảo trì' : '✅ Hoạt động bình thường';
+        loadStats();
+      } else toast('❌ Lỗi', 'err');
+    }
+
+    async function exportData() {
+      window.open(API('/api/admin/export'), '_blank');
+    }
+
+    // =====================================================
+    // INIT + AUTO REFRESH
+    // =====================================================
     loadStats();
-  } else toast('❌ Lỗi','err');
-}
-
-async function exportData() {
-  window.open(API('/api/admin/export'), '_blank');
-}
-
-// =====================================================
-// INIT + AUTO REFRESH
-// =====================================================
-loadStats();
-setInterval(pollLiveLogs, 5000);
-setInterval(loadStats, 30000); // refresh đầy đủ mỗi 30s
-</script>
+    setInterval(pollLiveLogs, 5000);
+    setInterval(loadStats, 30000); // refresh đầy đủ mỗi 30s
+  </script>
 </body>
+
 </html>
