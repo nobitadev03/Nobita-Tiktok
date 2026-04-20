@@ -271,6 +271,42 @@ app.post('/api/admin/vip', requireAdminToken, (req, res) => {
     saveData(); res.json({ success: true });
 });
 
+app.post('/api/admin/premium', requireAdminToken, (req, res) => {
+    const uid = parseInt(req.body.userId);
+    const action = req.body.action;
+    const user = stats.activeUsers.get(uid)?.username || 'user';
+    
+    if (action === 'add' || !action) {
+        premiumUsers.add(uid);
+        bot.sendMessage(uid, '💎 *Chúc mừng!* Bạn đã được nâng cấp lên *Premium*!', { parse_mode: 'Markdown' }).catch(() => { });
+        addActivityLog('ok', `💎 Admin đã cấp Premium cho @${user} (ID: ${uid})`);
+    } else {
+        premiumUsers.delete(uid);
+        bot.sendMessage(uid, '⚠️ Quyền Premium của bạn đã bị thu hồi.').catch(() => { });
+        addActivityLog('warn', `⚠️ Admin thu hồi Premium của @${user} (ID: ${uid})`);
+    }
+    saveData(); res.json({ success: true });
+});
+
+app.post('/api/admin/setlimit', requireAdminToken, (req, res) => {
+    const uid = parseInt(req.body.userId);
+    const limit = parseInt(req.body.limit) || 0;
+    const user = stats.activeUsers.get(uid)?.username || 'user';
+    
+    userLimitOverrides.set(uid, limit);
+    addActivityLog('warn', `🚦 Admin đặt giới hạn ${limit}/10s cho @${user} (ID: ${uid})`);
+    saveData(); res.json({ success: true });
+});
+
+app.post('/api/admin/resetlimit', requireAdminToken, (req, res) => {
+    const uid = parseInt(req.body.userId);
+    const user = stats.activeUsers.get(uid)?.username || 'user';
+    
+    userLimitOverrides.delete(uid);
+    addActivityLog('ok', `🚦 Admin reset giới hạn cho @${user} (ID: ${uid})`);
+    saveData(); res.json({ success: true });
+});
+
 app.post('/api/admin/maintenance', requireAdminToken, async (req, res) => {
     maintenanceMode = req.body.status === 'on'; saveData();
     res.json({ success: true, maintenanceMode });
@@ -382,7 +418,7 @@ app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 // 🔤 REGEX PATTERNS - Expanded Platform Support
 // ============================================================
 const PLATFORMS = {
-    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|v\/\d+|[\w-]+|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok/Douyin' },
+    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|video\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok/Douyin' },
     facebook: { regex: /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i, emoji: '🐙', name: 'Facebook' },
     youtube: { regex: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]+/i, emoji: '▶️', name: 'YouTube' },
     instagram: { regex: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p)\/[\w-]+/i, emoji: '📸', name: 'Instagram' },
@@ -1229,7 +1265,7 @@ async function processQueue() {
                 caption: botSettings.captionText,
                 reply_to_message_id: request.messageId,
                 supports_streaming: true,
-                reply_markup: { inline_keyboard: [[{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }]] }
+                reply_markup: botSettings.mp3Button ? { inline_keyboard: [[{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }]] } : undefined
             });
 
             fs.unlink(tempFile, () => { });
@@ -1310,7 +1346,23 @@ async function normalizeUrl(url) {
 }
 
 // 🎵 TikTok / Douyin
+function normalizeDouyinUrl(url) {
+    // Chuyển douyin.com/jingxuan/...?modal_id=ID → douyin.com/video/ID
+    try {
+        const u = new URL(url);
+        if (u.hostname.includes('douyin.com')) {
+            const modalId = u.searchParams.get('modal_id');
+            if (modalId) {
+                return `https://www.douyin.com/video/${modalId}`;
+            }
+        }
+    } catch (e) { }
+    return url;
+}
+
 async function getVideoNoWatermark(url) {
+    // Chuẩn hóa URL Douyin (jingxuan/modal_id → /video/ID)
+    url = normalizeDouyinUrl(url);
     const normalizedUrl = await normalizeUrl(url);
 
     const apis = [
