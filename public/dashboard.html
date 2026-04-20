@@ -1843,14 +1843,14 @@
       unmute: { endpoint: '/api/admin/unmute', getBody: () => ({ userId: v('unban-uid') }), success: '🔊 Đã unmute' },
       addvip: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('vip-uid'), action: 'add' }), success: '⭐ Đã cấp VIP' },
       removevip: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('vip-uid'), action: 'remove' }), success: 'Đã xóa VIP' },
-      addprem: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('prem-uid'), action: 'addprem' }), success: '💎 Đã cấp Premium' },
-      remprem: { endpoint: '/api/admin/vip', getBody: () => ({ userId: v('prem-uid'), action: 'remprem' }), success: 'Đã xóa Premium' },
+      addprem: { endpoint: '/api/admin/premium', getBody: () => ({ userId: v('prem-uid'), action: 'add' }), success: '💎 Đã cấp Premium' },
+      remprem: { endpoint: '/api/admin/premium', getBody: () => ({ userId: v('prem-uid'), action: 'remove' }), success: 'Đã xóa Premium' },
       warn: { endpoint: '/api/admin/warn', getBody: () => ({ userId: v('warn-uid'), reason: v('warn-reason') }), success: '⚠️ Đã cảnh cáo' },
       clearwarn: { endpoint: '/api/admin/clearwarnings', getBody: () => ({ userId: v('warn-uid') }), success: 'Đã xóa cảnh cáo' },
       slowmode: { endpoint: '/api/admin/slowmode', getBody: () => ({ userId: v('slow-uid'), delay: (parseInt(v('slow-delay')) || 30) * 1000 }), success: '⏱️ Bật slowmode' },
       clearslowmode: { endpoint: '/api/admin/slowmode', getBody: () => ({ userId: v('slow-uid') }), method: 'DELETE', success: 'Tắt slowmode' },
-      setlimit: { endpoint: '/api/admin/ban', getBody: () => ({ userId: v('limit-uid') }), success: '🚦 Áp dụng giới hạn' },
-      resetlimit: { endpoint: '/api/admin/ban', getBody: () => ({ userId: v('limit-uid') }), success: 'Reset giới hạn' },
+      setlimit: { endpoint: '/api/admin/setlimit', getBody: () => ({ userId: v('limit-uid'), limit: parseInt(v('limit-val')) || 0 }), success: '🚦 Áp dụng giới hạn' },
+      resetlimit: { endpoint: '/api/admin/resetlimit', getBody: () => ({ userId: v('limit-uid') }), success: 'Reset giới hạn' },
     };
 
     function v(id) { return (document.getElementById(id) || {}).value?.trim() || ''; }
@@ -1861,12 +1861,8 @@
       const body = cfg.getBody();
       if (!body.userId) { toast('⚠️ Vui lòng nhập User ID', 'err'); return; }
 
-      // setlimit / resetlimit dùng endpoint riêng
+      // setlimit / resetlimit / premium dùng endpoint từ config
       let endpoint = cfg.endpoint;
-      if (action === 'setlimit') endpoint = '/api/admin/setlimit';
-      if (action === 'resetlimit') endpoint = '/api/admin/resetlimit';
-      if (action === 'addprem') { endpoint = '/api/admin/premium'; body.action = undefined; }
-      if (action === 'remprem') { endpoint = '/api/admin/premium'; body.action = 'remove'; }
 
       const method = cfg.method || 'POST';
       let res;
