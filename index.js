@@ -25,7 +25,7 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5');
 const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
 const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
 const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
-const BOT_VERSION = '4.1';
+const BOT_VERSION = '4.2';
 const BOT_EDITION = 'Ultra Edition';
 const BOT_START_TIME = Date.now();
 
@@ -862,7 +862,8 @@ app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 // 🔤 REGEX PATTERNS - Expanded Platform Support
 // ============================================================
 const PLATFORMS = {
-    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|video\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok/Douyin' },
+    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?tiktok\.com\/(?:@[\w.-]+\/video\/\d+|video\/\d+|v\/\d+|share\/video\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?)|(?:https?:\/\/)?(?:vm|vt|v)\.tiktok\.com\/[\w]+/i, emoji: '🎵', name: 'TikTok' },
+    douyin: { regex: /(?:https?:\/\/)?(?:www\.)?douyin\.com\/(?:video\/\d+|share\/video\/\d+|@[\w.-]+\/video\/\d+|[\w-]+(?:\?[^\s]*modal_id=\d+[^\s]*)?|jingxuan\?[^\s]*modal_id=\d+[^\s]*)|(?:https?:\/\/)?v\.douyin\.com\/[\w-]+\/?|(?:https?:\/\/)?(?:www\.)?iesdouyin\.com\/share\/video\/\d+/i, emoji: '🎶', name: 'Douyin' },
     facebook: { regex: /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i, emoji: '🐙', name: 'Facebook' },
     youtube: { regex: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]+/i, emoji: '▶️', name: 'YouTube' },
     instagram: { regex: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p)\/[\w-]+/i, emoji: '📸', name: 'Instagram' },
@@ -871,6 +872,10 @@ const PLATFORMS = {
     snapchat: { regex: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/(?:spotlight|add|discover)\/[\w-]+/i, emoji: '👻', name: 'Snapchat' },
     reddit: { regex: /(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/i, emoji: '🤖', name: 'Reddit' },
     bilibili: { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
+    threads: { regex: /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@[\w.-]+\/post\/[\w-]+/i, emoji: '🧵', name: 'Threads' },
+    vimeo: { regex: /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:channels\/[\w-]+\/\d+|groups\/[\w-]+\/videos\/\d+|\d+(?:\/\w+)?)|(?:https?:\/\/)?player\.vimeo\.com\/video\/\d+/i, emoji: '🎬', name: 'Vimeo' },
+    dailymotion: { regex: /(?:https?:\/\/)?(?:www\.)?dailymotion\.com\/(?:video|embed\/video)\/[\w]+|(?:https?:\/\/)?dai\.ly\/[\w]+/i, emoji: '📹', name: 'Dailymotion' },
+    likee: { regex: /(?:https?:\/\/)?(?:www\.|l\.|m\.)?likee\.(?:video|com)\/(?:v\/[\w-]+|@[\w.-]+\/video\/\d+|video\/\d+|[\w.-]+\/video\/\d+)/i, emoji: '🎯', name: 'Likee' },
 };
 
 function detectPlatform(text) {
@@ -1447,7 +1452,7 @@ bot.onText(/^\/info\s+(.+)/, async (msg, match) => {
 // Simple metadata fetcher used by /info (best-effort)
 async function getVideoInfo(url, platform) {
     try {
-        if (platform === 'tiktok') {
+        if (platform === 'tiktok' || platform === 'douyin') {
             const res = await axios.post('https://www.tikwm.com/api/', { url, hd: 1 }, { timeout: 15000 });
             const d = res.data?.data;
             if (!d) return null;
@@ -2228,7 +2233,7 @@ bot.on('callback_query', async (query) => {
         const proc = await bot.sendMessage(chatId, '⏳ Đang chuyển đổi MP3...');
         try {
             let mp3Url = null;
-            if (info.platform === 'tiktok') {
+            if (info.platform === 'tiktok' || info.platform === 'douyin') {
                 const res = await axios.post('https://www.tikwm.com/api/', { url: info.url }, { timeout: 10000 });
                 if (res.data?.data?.music) mp3Url = res.data.data.music;
             }
@@ -2496,6 +2501,11 @@ async function processQueue() {
             case 'twitter': videoData = await downloadTwitterVideo(request.url); break;
             case 'reddit': videoData = await downloadRedditVideo(request.url); break;
             case 'bilibili': videoData = await downloadBilibiliVideo(request.url); break;
+            case 'douyin': videoData = await downloadDouyinVideo(request.url); break;
+            case 'threads': videoData = await downloadThreadsVideo(request.url); break;
+            case 'vimeo': videoData = await downloadVimeoVideo(request.url); break;
+            case 'dailymotion': videoData = await downloadDailymotionVideo(request.url); break;
+            case 'likee': videoData = await downloadLikeeVideo(request.url); break;
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
@@ -2937,6 +2947,135 @@ async function downloadBilibiliVideo(url) {
         }
         throw new Error('Bilibili API failed');
     } catch (e) { console.error('Bilibili failed:', e.message); return null; }
+}
+
+// ============================================================
+// 🎶 DOUYIN — v4.2 dedicated downloader
+// ============================================================
+async function resolveDouyinShort(url) {
+    // v.douyin.com/<code>/ → follow redirect to full iesdouyin URL, then extract aweme_id
+    try {
+        const r = await axios.get(url, {
+            maxRedirects: 10, timeout: 10000, validateStatus: () => true,
+            headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1' }
+        });
+        const finalUrl = r.request?.res?.responseUrl || url;
+        const m = finalUrl.match(/(?:video|share\/video)\/(\d+)/);
+        if (m) return `https://www.douyin.com/video/${m[1]}`;
+        return finalUrl;
+    } catch { return url; }
+}
+
+async function downloadDouyinVideo(url) {
+    // 1. normalize modal_id / v.douyin.com / iesdouyin → canonical douyin.com/video/<id>
+    let canonical = normalizeDouyinUrl(url);
+    if (/^https?:\/\/v\.douyin\.com\//i.test(canonical) || /iesdouyin\.com/i.test(canonical)) {
+        canonical = await resolveDouyinShort(canonical);
+    }
+
+    const apis = [
+        // TikWM supports Douyin too
+        async () => {
+            const res = await axios.post('https://www.tikwm.com/api/', { url: canonical, hd: 1 }, {
+                timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.code === 0 && (res.data?.data?.play || res.data?.data?.hdplay))
+                return { url: res.data.data.hdplay || res.data.data.play, title: res.data.data.title || 'Douyin Video' };
+            throw new Error('TikWM douyin failed');
+        },
+        // yt-dlp with Douyin Referer + mobile UA
+        async () => {
+            const info = await youtubedl(canonical, {
+                dumpSingleJson: true, noWarnings: true, noCheckCertificates: true,
+                addHeader: [
+                    'Referer:https://www.douyin.com/',
+                    'User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+                ],
+            });
+            const finalUrl = info.url || info.formats?.slice().reverse().find(f => f.vcodec !== 'none')?.url;
+            if (finalUrl) return { url: finalUrl, title: info.title || 'Douyin Video' };
+            throw new Error('yt-dlp douyin failed');
+        },
+        // snaptik mirror (accepts douyin URLs)
+        async () => {
+            const res = await axios.get('https://snaptikvideo.com/tikwm.php', {
+                params: { url: canonical, hd: 1 }, timeout: 15000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.url) return { url: res.data.url, title: 'Douyin Video' };
+            throw new Error('SnapTik douyin failed');
+        },
+    ];
+
+    for (const api of apis) {
+        try {
+            const result = await retryWithBackoff(api);
+            if (result?.url) {
+                const sizeInfo = await checkVideoSize(result.url);
+                return { ...result, ...sizeInfo };
+            }
+        } catch (e) { console.log('Douyin API failed:', e.message); }
+    }
+    return null;
+}
+
+// ============================================================
+// 🔁 GENERIC yt-dlp wrapper — v4.2 (Threads / Vimeo / Dailymotion / Likee)
+// ============================================================
+async function downloadViaYtdlp(url, fallbackTitle, extraOpts = {}) {
+    try {
+        const info = await youtubedl(url, {
+            dumpSingleJson: true, noWarnings: true, noCheckCertificates: true,
+            preferFreeFormats: true,
+            ...extraOpts,
+        });
+        if (info.duration && info.duration > 1800) throw new Error('Video quá dài (>30 phút)');
+        let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
+            || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none')
+            || info.formats?.slice().reverse().find(f => f.vcodec !== 'none');
+        const finalUrl = format ? format.url : info.url;
+        if (!finalUrl) throw new Error('No format found');
+        const sizeInfo = await checkVideoSize(finalUrl);
+        return { url: finalUrl, title: info.title || fallbackTitle, ...sizeInfo };
+    } catch (e) { console.error(`yt-dlp ${fallbackTitle} failed:`, e.message); return null; }
+}
+
+async function downloadVimeoVideo(url) { return downloadViaYtdlp(url, 'Vimeo Video'); }
+async function downloadDailymotionVideo(url) { return downloadViaYtdlp(url, 'Dailymotion Video'); }
+async function downloadLikeeVideo(url) {
+    const r = await downloadViaYtdlp(url, 'Likee Video');
+    if (r) return r;
+    // Fallback: scrape videoUrl from Likee HTML
+    try {
+        const res = await axios.get(url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const m = res.data.match(/"videoUrl"\s*:\s*"([^"]+)"/)
+            || res.data.match(/property="og:video(?::url)?"\s+content="([^"]+)"/i);
+        if (m && m[1]) {
+            const vu = m[1].replace(/\\u002F/g, '/').replace(/\\\//g, '/');
+            const sizeInfo = await checkVideoSize(vu);
+            return { url: vu, title: 'Likee Video', ...sizeInfo };
+        }
+    } catch (e) { console.error('Likee fallback failed:', e.message); }
+    return null;
+}
+async function downloadThreadsVideo(url) {
+    const r = await downloadViaYtdlp(url, 'Threads Video');
+    if (r) return r;
+    // Fallback: scrape og:video from Threads public page
+    try {
+        const res = await axios.get(url, {
+            timeout: 15000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NobitaBot/4.2)' }
+        });
+        const m = res.data.match(/property="og:video(?::url|:secure_url)?"\s+content="([^"]+)"/i)
+            || res.data.match(/"video_url"\s*:\s*"([^"]+)"/);
+        if (m && m[1]) {
+            const vu = m[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+            const sizeInfo = await checkVideoSize(vu);
+            return { url: vu, title: 'Threads Video', ...sizeInfo };
+        }
+    } catch (e) { console.error('Threads fallback failed:', e.message); }
+    return null;
 }
 
 // ============================================================
