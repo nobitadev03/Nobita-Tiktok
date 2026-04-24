@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nobita Bot v4.1 Ultra — Admin Dashboard</title>
+  <title>Nobita Bot v4.2 Ultra — Admin Dashboard</title>
   <link rel="manifest" href="data:application/manifest+json;charset=utf-8,%7B%22name%22%3A%22Nobita%20Bot%20Admin%22%2C%22short_name%22%3A%22NobitaBot%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f1117%22%2C%22theme_color%22%3A%22%233b82f6%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%3Butf8%2C%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20192%20192%27%3E%3Crect%20width%3D%27192%27%20height%3D%27192%27%20rx%3D%2742%27%20fill%3D%27%233b82f6%27%2F%3E%3Ctext%20x%3D%2796%27%20y%3D%27120%27%20font-size%3D%2796%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%3E%F0%9F%A4%96%3C%2Ftext%3E%3C%2Fsvg%3E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
   <meta name="theme-color" content="#3b82f6">
   <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🤖</text></svg>">
@@ -1380,6 +1380,250 @@
     .lb-rank.g-3 { color: #d97706; }
     .lb-name { flex: 1; }
     .lb-count { font-family: var(--mono); font-size: 13px; color: var(--text2); }
+
+    /* ===================================================================
+       v4.2 UI POLISH — full visual overhaul (dark + light safe)
+       =================================================================== */
+
+    /* smooth fonts */
+    html, body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+
+    /* animated ambient background (both themes) */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(800px 520px at 8% -5%,  rgba(59,130,246,.18), transparent 60%),
+        radial-gradient(700px 520px at 105% 8%, rgba(168,85,247,.14), transparent 60%),
+        radial-gradient(520px 420px at 60% 105%, rgba(34,197,94,.10), transparent 60%);
+      animation: bgfloat 18s ease-in-out infinite alternate;
+    }
+    html[data-theme="light"] body::before {
+      background:
+        radial-gradient(900px 600px at 10% -10%,  rgba(37,99,235,.10), transparent 60%),
+        radial-gradient(700px 520px at 110% 5%, rgba(124,58,237,.08), transparent 60%),
+        radial-gradient(520px 420px at 60% 110%, rgba(16,185,129,.07), transparent 60%);
+    }
+    @keyframes bgfloat {
+      0%   { transform: translate3d(0,0,0) scale(1); }
+      100% { transform: translate3d(-20px,10px,0) scale(1.04); }
+    }
+    .shell { position: relative; z-index: 1; }
+
+    /* === Sidebar v4.2 === */
+    .sidebar { background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%); border-right: 1px solid var(--border); box-shadow: 1px 0 0 rgba(255,255,255,.02); }
+    .logo { border-bottom: 1px solid var(--border); background:
+      radial-gradient(200px 120px at 0% 0%, rgba(59,130,246,.10), transparent 80%),
+      radial-gradient(200px 120px at 100% 100%, rgba(168,85,247,.08), transparent 80%); }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%);
+      box-shadow: 0 6px 18px rgba(59,130,246,.35), inset 0 0 0 1px rgba(255,255,255,.15);
+      position: relative;
+      font-size: 18px;
+    }
+    .logo-icon::after {
+      content: '';
+      position: absolute; inset: -4px; border-radius: 14px;
+      background: inherit; opacity: .35; filter: blur(10px); z-index: -1;
+      animation: logoGlow 3s ease-in-out infinite alternate;
+    }
+    @keyframes logoGlow { 0%{opacity:.25;} 100%{opacity:.55;} }
+    .logo-text {
+      background: linear-gradient(90deg, var(--text), var(--text) 40%, var(--blue));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-weight: 700; letter-spacing: .01em;
+    }
+    .logo-ver { font-weight: 500; opacity: .85; }
+
+    .nav-item {
+      position: relative;
+      border-radius: 0 8px 8px 0;
+      margin-right: 8px;
+      transition: background .15s ease, color .15s ease, transform .15s ease, box-shadow .2s ease;
+    }
+    .nav-item:hover { transform: translateX(2px); }
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(59,130,246,.16), transparent 80%);
+      color: var(--blue); border-left-color: var(--blue);
+      box-shadow: inset 0 0 0 1px rgba(59,130,246,.18);
+    }
+    .nav-item.active::before {
+      content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+      width: 3px; border-radius: 0 3px 3px 0;
+      background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+      box-shadow: 0 0 12px rgba(59,130,246,.6);
+    }
+    .nav-item .nav-icon { transition: transform .2s ease; }
+    .nav-item:hover .nav-icon { transform: scale(1.15); }
+
+    /* === Topbar v4.2 (glass) === */
+    .topbar {
+      backdrop-filter: blur(12px) saturate(1.2);
+      -webkit-backdrop-filter: blur(12px) saturate(1.2);
+      background: color-mix(in srgb, var(--bg2) 82%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    .topbar-title {
+      font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+      background: linear-gradient(90deg, var(--text), var(--blue));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+
+    /* === Metric cards v4.2 === */
+    .metric {
+      position: relative; overflow: hidden;
+      background: linear-gradient(160deg, var(--bg2) 0%, color-mix(in srgb, var(--bg2) 85%, var(--bg3)) 100%);
+      border-radius: 12px;
+      box-shadow: 0 1px 0 rgba(255,255,255,.02), 0 10px 24px -18px rgba(0,0,0,.6);
+    }
+    .metric::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(59,130,246,.08), transparent 40%);
+      opacity: 0; transition: opacity .25s ease;
+      pointer-events: none;
+    }
+    .metric:hover { transform: translateY(-2px); border-color: var(--blue); box-shadow: 0 1px 0 rgba(255,255,255,.03), 0 18px 40px -20px rgba(59,130,246,.35); }
+    .metric:hover::before { opacity: 1; }
+    .metric-val {
+      background: linear-gradient(90deg, var(--text), var(--blue));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-size: 26px; letter-spacing: -.02em;
+    }
+
+    /* === Chart & section cards === */
+    .chart-card, .section .table-wrap {
+      border-radius: 12px;
+      background: linear-gradient(180deg, var(--bg2), color-mix(in srgb, var(--bg2) 92%, var(--bg3)));
+      box-shadow: 0 1px 0 rgba(255,255,255,.02), 0 14px 36px -22px rgba(0,0,0,.5);
+    }
+    .chart-card { transition: transform .2s ease, box-shadow .2s ease; }
+    .chart-card:hover { transform: translateY(-1px); box-shadow: 0 1px 0 rgba(255,255,255,.03), 0 22px 50px -24px rgba(59,130,246,.22); }
+    .chart-title { font-weight: 600; color: var(--text); letter-spacing: -.005em; }
+
+    /* === Platform pills v4.2 — gradient per-platform === */
+    .platform-pill {
+      position: relative; overflow: hidden;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+      transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
+      cursor: default;
+    }
+    .platform-pill::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(59,130,246,.18), rgba(168,85,247,.15));
+      opacity: 0; transition: opacity .22s ease;
+    }
+    .platform-pill > * { position: relative; z-index: 1; }
+    .platform-pill:hover { transform: translateY(-2px) scale(1.03); border-color: var(--blue); box-shadow: 0 8px 20px -12px rgba(59,130,246,.6); }
+    .platform-pill:hover::before { opacity: 1; }
+
+    /* per-platform accent (hover only) */
+    .platform-pill[data-platform="tiktok"]:hover      { border-color: #ff0050; box-shadow: 0 8px 20px -12px rgba(255,0,80,.55); }
+    .platform-pill[data-platform="douyin"]:hover      { border-color: #ff2e63; box-shadow: 0 8px 20px -12px rgba(255,46,99,.55); }
+    .platform-pill[data-platform="facebook"]:hover    { border-color: #1877f2; box-shadow: 0 8px 20px -12px rgba(24,119,242,.55); }
+    .platform-pill[data-platform="youtube"]:hover     { border-color: #ff0000; box-shadow: 0 8px 20px -12px rgba(255,0,0,.50); }
+    .platform-pill[data-platform="instagram"]:hover   { border-color: #e1306c; box-shadow: 0 8px 20px -12px rgba(225,48,108,.55); }
+    .platform-pill[data-platform="twitter"]:hover     { border-color: #1da1f2; box-shadow: 0 8px 20px -12px rgba(29,161,242,.55); }
+    .platform-pill[data-platform="pinterest"]:hover   { border-color: #e60023; box-shadow: 0 8px 20px -12px rgba(230,0,35,.55); }
+    .platform-pill[data-platform="snapchat"]:hover    { border-color: #fffc00; box-shadow: 0 8px 20px -12px rgba(255,252,0,.55); }
+    .platform-pill[data-platform="reddit"]:hover      { border-color: #ff4500; box-shadow: 0 8px 20px -12px rgba(255,69,0,.55); }
+    .platform-pill[data-platform="bilibili"]:hover    { border-color: #00a1d6; box-shadow: 0 8px 20px -12px rgba(0,161,214,.55); }
+    .platform-pill[data-platform="threads"]:hover     { border-color: #e2e8f0; box-shadow: 0 8px 20px -12px rgba(226,232,240,.55); }
+    .platform-pill[data-platform="vimeo"]:hover       { border-color: #1ab7ea; box-shadow: 0 8px 20px -12px rgba(26,183,234,.55); }
+    .platform-pill[data-platform="dailymotion"]:hover { border-color: #00aaff; box-shadow: 0 8px 20px -12px rgba(0,170,255,.55); }
+    .platform-pill[data-platform="likee"]:hover       { border-color: #f8d01a; box-shadow: 0 8px 20px -12px rgba(248,208,26,.55); }
+
+    /* entry animation for platform strip (whole group, quick) */
+    #supported-list { animation: stripFadeIn .35s ease; }
+    @keyframes stripFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* === Buttons v4.2 === */
+    .btn, button.btn {
+      position: relative; overflow: hidden;
+      transition: transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary, .btn-primary, .btn.blue {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      color: white; border: none;
+      box-shadow: 0 6px 18px -6px rgba(59,130,246,.6);
+    }
+    .btn.primary:hover, .btn-primary:hover, .btn.blue:hover {
+      box-shadow: 0 10px 26px -8px rgba(59,130,246,.8);
+      filter: brightness(1.06);
+    }
+
+    /* Uptime badge shimmer */
+    .uptime-badge {
+      position: relative; overflow: hidden;
+      background: linear-gradient(90deg, rgba(34,197,94,.10), rgba(34,197,94,.18), rgba(34,197,94,.10));
+      background-size: 200% 100%;
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0%{background-position:0% 50%;} 100%{background-position:200% 50%;} }
+
+    /* === Tables === */
+    table tbody tr, .table-row { transition: background .15s ease, transform .12s ease; }
+    table tbody tr:hover, .table-row:hover { background: rgba(59,130,246,.05) !important; }
+
+    /* === Modals/toasts === */
+    .modal-backdrop, .cpalette-backdrop { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); background: rgba(0,0,0,.55); }
+    html[data-theme="light"] .modal-backdrop, html[data-theme="light"] .cpalette-backdrop { background: rgba(15,23,42,.35); }
+    .modal, .cpalette {
+      border-radius: 14px;
+      box-shadow: 0 30px 80px -20px rgba(0,0,0,.6), 0 0 0 1px var(--border);
+      animation: modalIn .2s ease;
+    }
+    @keyframes modalIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    /* === Scrollbar === */
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: color-mix(in srgb, var(--text3) 40%, transparent);
+      border-radius: 10px; border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--blue) 55%, transparent); background-clip: content-box; }
+
+    /* === Page transition === */
+    .page.active { animation: pageFade .26s ease; }
+    @keyframes pageFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* === Bell panel polish === */
+    .bell-panel { border-radius: 12px; box-shadow: 0 20px 50px -15px rgba(0,0,0,.6), 0 0 0 1px var(--border); backdrop-filter: blur(8px); }
+    .bell-btn { transition: transform .15s ease, box-shadow .2s ease; }
+    .bell-btn:hover { transform: scale(1.08); box-shadow: 0 6px 18px -6px rgba(59,130,246,.5); }
+    .bell-dot.active { animation: bellBounce .4s ease; }
+    @keyframes bellBounce { 0%{transform:scale(.4);} 60%{transform:scale(1.2);} 100%{transform:scale(1);} }
+
+    /* === Reduce motion === */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+
+    /* === Footer banner === */
+    .app-footer {
+      padding: 12px 22px 22px; font-size: 11px; color: var(--text3);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border-top: 1px dashed var(--border); margin-top: 12px;
+    }
+    .app-footer a { color: var(--blue); text-decoration: none; }
+    .app-footer a:hover { text-decoration: underline; }
+    .app-footer .foot-logo { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text2); }
+
+    /* === Mobile polish === */
+    @media (max-width: 768px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); padding: 14px; gap: 10px; }
+      .metric-val { font-size: 22px; }
+      .topbar-title { font-size: 13px; }
+    }
   </style>
 </head>
 
@@ -1392,7 +1636,7 @@
         <div class="logo-icon">🤖</div>
         <div>
           <div class="logo-text">Nobita Bot</div>
-          <div class="logo-ver" id="bot-version">v4.1 Ultra</div>
+          <div class="logo-ver" id="bot-version">v4.2 Ultra</div>
         </div>
       </div>
       <nav>
@@ -2045,6 +2289,11 @@
         </div>
       </div>
 
+      <div class="app-footer">
+        <span class="foot-logo">🤖 Nobita Bot <span style="color:var(--text3);font-family:var(--mono);font-weight:400;">v4.2 Ultra</span></span>
+        <span>13 nền tảng · 14 route · realtime SSE · PWA · <a href="https://github.com/nobitadev03/Nobita-Tiktok" target="_blank" rel="noreferrer">GitHub</a></span>
+        <span id="foot-year" style="color:var(--text3);font-family:var(--mono);"></span>
+      </div>
     </div><!-- .content -->
   </div><!-- .shell -->
   <div class="toast" id="toast"></div>
@@ -3179,6 +3428,9 @@
       if (countEl) countEl.textContent = `${SUPPORTED_PLATFORMS.length} nền tảng · 14 route · Douyin HD`;
     }
     renderSupportedPlatformsStrip();
+    // v4.2: footer year
+    const fy = document.getElementById('foot-year');
+    if (fy) fy.textContent = '© ' + new Date().getFullYear() + ' · ' + navigator.platform.slice(0, 12);
     loadStats();
     initSSE();
     renderBell();
