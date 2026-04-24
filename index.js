@@ -25,7 +25,7 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5');
 const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
 const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
 const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
-const BOT_VERSION = '4.3';
+const BOT_VERSION = '4.3.1';
 const BOT_EDITION = 'Ultra Edition';
 const BOT_START_TIME = Date.now();
 
@@ -2611,7 +2611,8 @@ async function processQueue() {
         addActivityLog('err', `❌ Lỗi tải video của @${request.username}: ${err.message.substring(0, 50)}`);
 
         let errMsg = '❌ ';
-        if (err.message.includes('Could not retrieve')) errMsg += 'Link không hợp lệ hoặc video đã bị xóa.';
+        if (err.message.includes('FB_PRIVATE')) errMsg += 'Video Facebook này ở chế độ riêng tư hoặc yêu cầu đăng nhập. Hãy thử một link công khai, hoặc cấu hình FB_COOKIES_TXT trong env.';
+        else if (err.message.includes('Could not retrieve')) errMsg += 'Link không hợp lệ hoặc video đã bị xóa.';
         else if (err.message.includes('timeout')) errMsg += 'Timeout. Vui lòng thử lại.';
         else if (err.message.includes('quá lớn')) errMsg += err.message;
         else errMsg += 'Lỗi không xác định. Hãy thử link khác.';
@@ -2740,102 +2741,149 @@ async function getVideoNoWatermark(url) {
     return null;
 }
 
-// 🐙 Facebook
+// 🐙 Facebook — rewritten v4.3.1 (SnapSave eval-capture, private-video detection, cookie-supported yt-dlp)
+const FB_UA_DESK = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const FB_UA_MOB  = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1';
+
 async function normalizeFbUrl(fbUrl) {
     if (fbUrl.includes('/share/') || fbUrl.includes('fb.watch')) {
         try {
-            const r = await axios.get(fbUrl, { maxRedirects: 10, timeout: 10000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const r = await axios.get(fbUrl, { maxRedirects: 10, timeout: 12000, validateStatus: () => true, headers: { 'User-Agent': FB_UA_DESK } });
             const final = r.request?.res?.responseUrl || fbUrl;
-            if (final.includes('facebook.com') || final.includes('fb.com')) return final;
+            // FB may redirect to login page; keep the original share URL in that case (SnapSave handles it)
+            if ((final.includes('facebook.com') || final.includes('fb.com')) && !/\/login\//i.test(final)) return final;
         } catch { }
     }
     return fbUrl;
 }
 
+// Decode SnapSave's obfuscated eval(f(...)) response: runs in a sandbox and captures what eval() would receive.
+function _decodeSnapsave(src) {
+    try {
+        const vm = require('vm');
+        let captured = '';
+        vm.runInNewContext(src, {
+            eval: (s) => { if (!captured) captured = String(s); return undefined; },
+            Math, parseInt, parseFloat,
+        }, { timeout: 5000 });
+        return captured;
+    } catch { return ''; }
+}
+
+function _unescapeHtml(s) {
+    return String(s || '')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\//g, '/')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"');
+}
+
+// Try to read FB cookies from env (Netscape cookies.txt format) or ./fb_cookies.txt file
+// This lets admin unlock private/geo-blocked FB videos via yt-dlp --cookies
+function _writeFbCookiesFile() {
+    try {
+        const raw = process.env.FB_COOKIES_TXT || process.env.FB_COOKIES || '';
+        if (!raw.trim()) {
+            const fallback = path.join(__dirname, 'fb_cookies.txt');
+            if (fs.existsSync(fallback)) return fallback;
+            return null;
+        }
+        const tmp = path.join(__dirname, '.fb_cookies_runtime.txt');
+        fs.writeFileSync(tmp, raw);
+        return tmp;
+    } catch { return null; }
+}
+
 async function downloadFacebookVideo(fbUrl) {
     const realUrl = await normalizeFbUrl(fbUrl);
+    console.log('[facebook] input:', fbUrl, '→', realUrl);
+    let privateDetected = false;
 
     const apis = [
-        async () => {
-            const youtubedl = require('youtube-dl-exec');
-            const info = await youtubedl(realUrl, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
-            let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
-                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
-            const finalUrl = format ? format.url : info.url;
-            if (finalUrl) return { url: finalUrl, title: info.title || 'Facebook Video' };
-            throw new Error('yt-dlp failed for FB');
-        },
+        // 1) SnapSave — works for most public FB videos. Has proxy CDN (d.rapidcdn.app) with TelegramBot UA.
         async () => {
             const res = await axios.post('https://snapsave.app/action.php', new URLSearchParams({ url: realUrl }), {
-                timeout: 20000,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://snapsave.app/' }
+                timeout: 25000, validateStatus: () => true, responseType: 'text', transformResponse: [(d) => d],
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': FB_UA_DESK,
+                    'Referer': 'https://snapsave.app/',
+                    'Origin': 'https://snapsave.app',
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
             });
-            let html = res.data;
-            if (typeof html === 'string' && html.includes('eval(function')) {
-                const fn = new Function(html.replace('eval(function', 'return (function'));
-                html = fn();
+            if (res.status !== 200 || typeof res.data !== 'string') throw new Error(`SnapSave HTTP ${res.status}`);
+            const decoded = _decodeSnapsave(res.data) || res.data;
+            if (/video is private|Private\s*Video/i.test(decoded)) {
+                privateDetected = true;
+                throw new Error('FB_PRIVATE');
             }
-            const m = html.match(/href="(https:\/\/d\.rapidcdn\.app\/v2\?token=[^"]+)"/i)
-                || html.match(/href="(https:\/\/[^"]+rapidcdn\.app[^"]+)"/i);
-            if (m) return { url: m[1], title: 'Facebook Video' };
-            throw new Error('SnapSave failed');
+            // Handle backslash-escaped href="..." in the decoded HTML
+            const htmlClean = decoded.replace(/\\"/g, '"');
+            const m = htmlClean.match(/href="(https:\/\/d\.rapidcdn\.app\/v2\?token=[^"]+)"/i)
+                || htmlClean.match(/href="(https:\/\/[^"]*rapidcdn\.app[^"]+)"/i)
+                || htmlClean.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
+            if (!m) throw new Error('SnapSave: no mp4 url');
+            const title = (htmlClean.match(/<strong>([^<]+)<\/strong>/) || [])[1] || 'Facebook Video';
+            return { url: m[1], title };
         },
+        // 2) yt-dlp (optionally with FB cookies for private/auth-required videos)
         async () => {
-            const res = await axios.post('https://api.cobalt.tools/', { url: realUrl }, {
-                timeout: 15000,
-                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-            });
-            if (res.data?.url) return { url: res.data.url, title: 'Facebook Video' };
-            throw new Error('Cobalt failed');
+            const youtubedl = require('youtube-dl-exec');
+            const cookiesFile = _writeFbCookiesFile();
+            const opts = {
+                dumpSingleJson: true,
+                noWarnings: true,
+                noCheckCertificates: true,
+                addHeader: [`User-Agent:${FB_UA_DESK}`, 'Referer:https://www.facebook.com/'],
+            };
+            if (cookiesFile) opts.cookies = cookiesFile;
+            const info = await youtubedl(realUrl, opts);
+            const format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
+                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
+            const finalUrl = format ? format.url : info.url;
+            if (!finalUrl) throw new Error('yt-dlp FB: no format');
+            return { url: finalUrl, title: info.title || 'Facebook Video' };
         },
+        // 3) getfvid (legacy; parse HTML for .mp4 links)
         async () => {
-            const res = await axios.post('https://getmyfb.com/api/ajaxSearch', new URLSearchParams({ q: realUrl, t: 'media', lang: 'en' }), {
-                timeout: 15000,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest' }
+            const res = await axios.post('https://www.getfvid.com/downloader',
+                new URLSearchParams({ URLz: realUrl }), {
+                timeout: 25000, validateStatus: () => true, responseType: 'text', transformResponse: [(d) => d],
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': FB_UA_DESK,
+                    'Referer': 'https://www.getfvid.com/',
+                    'Origin': 'https://www.getfvid.com',
+                }
             });
-            const m = (res.data?.data || '').match(/href="([^"]+)"[^>]*>\s*Download HD/i) || (res.data?.data || '').match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
-            if (m) return { url: m[1], title: 'Facebook Video' };
-            throw new Error('GetMyFB failed');
+            if (res.status !== 200 || typeof res.data !== 'string') throw new Error(`getfvid HTTP ${res.status}`);
+            const body = res.data;
+            const hd = body.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"[^>]*>[^<]*HD/i);
+            const sd = body.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"[^>]*>\s*Download/i);
+            const any = body.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
+            const chosen = (hd && hd[1]) || (sd && sd[1]) || (any && any[1]);
+            if (!chosen) throw new Error('getfvid: no mp4');
+            return { url: _unescapeHtml(chosen), title: 'Facebook Video' };
         },
-        async () => {
-            const res = await axios.post('https://www.getfvid.com/downloader', new URLSearchParams({ URLz: realUrl }), {
-                timeout: 20000,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.getfvid.com/' }
-            });
-            const m = res.data.match(/href="(https:\/\/[^"]+)\.mp4[^"]*"[^>]*>.*?HD/is)
-                || res.data.match(/href="(https:\/\/video\.f?b[^"]+\.mp4[^"]*)"/i);
-            if (m) return { url: m[1].includes('.mp4') ? m[1] : m[1] + '.mp4', title: 'Facebook Video' };
-            throw new Error('GetFVid failed');
-        },
-        async () => {
-            const res = await axios.get('https://fdown.net/download.php', {
-                params: { URLz: realUrl }, timeout: 20000,
-                headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://fdown.net/' }
-            });
-            const m = res.data.match(/id="sdlink"\s+href="([^"]+)"/i) || res.data.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
-            if (m) return { url: m[1], title: 'Facebook Video' };
-            throw new Error('FDown failed');
-        },
-        async () => {
-            const res = await axios.post('https://fbdownloader.net/api/ajaxSearch', new URLSearchParams({ q: realUrl, t: 'home' }), {
-                timeout: 20000,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'X-Requested-With': 'XMLHttpRequest' }
-            });
-            const m = res.data?.data?.match(/href="([^"]+)"[^>]*>\s*Download HD/i) || res.data?.data?.match(/href="(https:\/\/[^"]+\.mp4[^"]*)"/i);
-            if (m) return { url: m[1], title: 'Facebook Video' };
-            throw new Error('FBDownloader failed');
-        }
     ];
 
-    for (const api of apis) {
+    for (let i = 0; i < apis.length; i++) {
         try {
-            const result = await retryWithBackoff(api);
+            const result = await retryWithBackoff(apis[i]);
             if (result?.url) {
+                console.log(`[facebook] ✓ API ${i + 1} succeeded`);
                 const sizeInfo = await checkVideoSize(result.url);
                 return { ...result, ...sizeInfo };
             }
-        } catch (e) { console.log('FB API failed:', e.message); }
+        } catch (e) {
+            console.log(`[facebook] ✗ API ${i + 1} failed: ${e.message}`);
+            if (e.message === 'FB_PRIVATE') privateDetected = true;
+        }
     }
+    if (privateDetected) throw new Error('FB_PRIVATE');
+    console.log('[facebook] all APIs exhausted');
     return null;
 }
 
