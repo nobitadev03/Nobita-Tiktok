@@ -1474,6 +1474,14 @@
             <div class="metric-sub dn" id="m-banned">Banned: —</div>
           </div>
         </div>
+        <div class="section" id="supported-platforms-strip">
+          <div class="section-header">
+            <div class="section-title">🌐 Nền tảng hỗ trợ <span style="font-weight:400;color:var(--text3);font-size:11px;margin-left:6px;" id="supported-count">—</span></div>
+          </div>
+          <div class="table-wrap" style="padding:12px 16px;">
+            <div id="supported-list" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          </div>
+        </div>
         <div class="charts">
           <div class="chart-card">
             <div class="chart-title">Hoạt động 24h (requests/giờ)</div>
@@ -1986,7 +1994,7 @@
             <div class="toggle-row"><span class="toggle-label">Auto-ban sau 5 lần spam</span>
               <div class="toggle" id="t-autobanspam" onclick="toggleSetting(this,'autoBanSpam')"></div>
             </div>
-            <div class="toggle-row"><span class="toggle-label">Hỗ trợ TikTok HD</span>
+            <div class="toggle-row"><span class="toggle-label">Hỗ trợ TikTok / Douyin HD</span>
               <div class="toggle" id="t-tiktokhd" onclick="toggleSetting(this,'supportTikTokHD')"></div>
             </div>
             <div class="toggle-row"><span class="toggle-label">Nút tải MP3</span>
@@ -2846,7 +2854,23 @@
     // =====================================================
     // v4.0 ANALYTICS
     // =====================================================
-    const PLATFORM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#eab308'];
+    const PLATFORM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#eab308', '#14b8a6', '#f97316', '#6366f1', '#d946ef', '#0ea5e9'];
+    const SUPPORTED_PLATFORMS = [
+      { key: 'tiktok',      emoji: '🎵', name: 'TikTok' },
+      { key: 'douyin',      emoji: '🎶', name: 'Douyin' },
+      { key: 'facebook',    emoji: '🐙', name: 'Facebook' },
+      { key: 'youtube',     emoji: '▶️', name: 'YouTube' },
+      { key: 'instagram',   emoji: '📸', name: 'Instagram' },
+      { key: 'twitter',     emoji: '🐦', name: 'Twitter/X' },
+      { key: 'pinterest',   emoji: '📌', name: 'Pinterest' },
+      { key: 'snapchat',    emoji: '👻', name: 'Snapchat' },
+      { key: 'reddit',      emoji: '🤖', name: 'Reddit' },
+      { key: 'bilibili',    emoji: '📺', name: 'Bilibili' },
+      { key: 'threads',     emoji: '🧵', name: 'Threads' },
+      { key: 'vimeo',       emoji: '🎬', name: 'Vimeo' },
+      { key: 'dailymotion', emoji: '📹', name: 'Dailymotion' },
+      { key: 'likee',       emoji: '🎯', name: 'Likee' },
+    ];
     async function loadAnalytics() {
       const [days, plat] = await Promise.all([
         apiFetch('/api/stats/daily7'),
@@ -3144,6 +3168,17 @@
     // =====================================================
     // INIT + AUTO REFRESH
     // =====================================================
+    // v4.2: render supported-platforms strip (13 platforms / 14 keys)
+    function renderSupportedPlatformsStrip() {
+      const host = document.getElementById('supported-list');
+      if (!host) return;
+      host.innerHTML = SUPPORTED_PLATFORMS.map(p =>
+        `<span class="platform-pill" data-platform="${p.key}">${p.emoji} ${p.name}</span>`
+      ).join('');
+      const countEl = document.getElementById('supported-count');
+      if (countEl) countEl.textContent = `${SUPPORTED_PLATFORMS.length} nền tảng · 14 route · Douyin HD`;
+    }
+    renderSupportedPlatformsStrip();
     loadStats();
     initSSE();
     renderBell();
