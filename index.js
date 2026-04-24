@@ -6,7 +6,7 @@ const path = require('path');
 const express = require('express');
 
 // ============================================================
-// 🤖 NOBITA BOT v3.0 - Ultimate Edition
+// 🤖 NOBITA BOT v4.0 - Ultra Edition
 // ============================================================
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -25,7 +25,8 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5');
 const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
 const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
 const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
-const BOT_VERSION = '3.0';
+const BOT_VERSION = '4.0';
+const BOT_EDITION = 'Ultra Edition';
 const BOT_START_TIME = Date.now();
 
 // ============================================================
@@ -63,7 +64,45 @@ let botSettings = {
     autoBanSpam: true,
     supportTikTokHD: true,
     mp3Button: true,
+    referralBonus: 5, // extra daily limit per referral
 };
+
+// ============================================================
+// 🎛️ USER PREFERENCES / FAVORITES / ACHIEVEMENTS (v4.0)
+// ============================================================
+// Per-user personal settings: { lang, defaultQuality, silentMode, showMP3Btn, autoFav }
+let userPreferences = new Map();
+// Per-user saved favorite media: userId -> [{ url, platform, title, savedAt }]
+let userFavorites = new Map();
+// Per-user daily check-in streaks: userId -> { streak, lastClaim, points }
+let dailyStreaks = new Map();
+// Referral tree: userId -> { referrer?, invitedCount, invitees[] }
+let referralData = new Map();
+// Per-platform request counter for analytics: { [platform]: count }
+let platformStats = {};
+// Rolling 7-day stat bucket: [{ date: YYYY-MM-DD, requests, downloads }]
+let daily7Stats = [];
+// Cache of pending "smart reply" actions keyed by short id (HD/SD/MP3/retry/fav)
+let actionCache = new Map();
+
+const DEFAULT_USER_PREFS = {
+    lang: 'vi',
+    defaultQuality: 'hd',    // hd | sd | mp3
+    silentMode: false,       // suppress non-essential notifications
+    showMP3Btn: true,
+    autoFav: false,          // auto-save every successful download to favorites
+};
+
+function getUserPrefs(userId) {
+    const cur = userPreferences.get(userId) || {};
+    return { ...DEFAULT_USER_PREFS, ...cur };
+}
+function setUserPref(userId, key, value) {
+    const cur = userPreferences.get(userId) || {};
+    cur[key] = value;
+    userPreferences.set(userId, cur);
+    saveData();
+}
 
 // ============================================================
 // 📋 ACTIVITY LOGS (In-memory, latest 50 events)
@@ -100,6 +139,12 @@ function loadData() {
             if (data.userWarnings) userWarnings = new Map(data.userWarnings);
             if (data.botSettings) botSettings = { ...botSettings, ...data.botSettings };
             if (data.maintenanceMode !== undefined) maintenanceMode = data.maintenanceMode;
+            if (data.userPreferences) userPreferences = new Map(data.userPreferences);
+            if (data.userFavorites) userFavorites = new Map(data.userFavorites);
+            if (data.dailyStreaks) dailyStreaks = new Map(data.dailyStreaks);
+            if (data.referralData) referralData = new Map(data.referralData);
+            if (data.platformStats) platformStats = data.platformStats;
+            if (data.daily7Stats) daily7Stats = data.daily7Stats;
             console.log('✅ Data loaded successfully.');
         }
     } catch (e) {
@@ -126,7 +171,13 @@ function saveData() {
             slowModeUsers: Array.from(slowModeUsers.entries()),
             userWarnings: Array.from(userWarnings.entries()),
             botSettings,
-            maintenanceMode
+            maintenanceMode,
+            userPreferences: Array.from(userPreferences.entries()),
+            userFavorites: Array.from(userFavorites.entries()),
+            dailyStreaks: Array.from(dailyStreaks.entries()),
+            referralData: Array.from(referralData.entries()),
+            platformStats,
+            daily7Stats
         }, null, 2));
     } catch (e) {
         console.error('❌ Error saving data:', e.message);
@@ -134,6 +185,173 @@ function saveData() {
 }
 
 loadData();
+
+// ============================================================
+// 🌍 I18N (vi / en) — gọn nhẹ, fallback vi
+// ============================================================
+const I18N = {
+    vi: {
+        welcome: (name) => `👋 Chào *${name}*! Mình là *Nobita Bot v${BOT_VERSION} — ${BOT_EDITION}*`,
+        maintenance: '⚠️ *Bot đang bảo trì!* Vui lòng quay lại sau.',
+        supportedPlatforms: '📹 *Hỗ trợ tải video từ:*',
+        typeHelp: '💡 Gõ /help để xem đầy đủ lệnh.',
+        menu_download: '📥 Tải video',
+        menu_help: '📖 Trợ giúp',
+        menu_settings: '⚙️ Cài đặt',
+        menu_favorites: '⭐ Yêu thích',
+        menu_achievements: '🏅 Thành tích',
+        menu_status: '📊 Trạng thái',
+        menu_invite: '🎁 Mời bạn',
+        menu_dashboard: '🖥️ Dashboard',
+        rate_limit: (w) => `⚠️ Gửi quá nhanh! Đợi ${w}s.\n💡 Nâng cấp VIP để không giới hạn!`,
+        slow_mode: '⏱️ Bạn đang trong chế độ chậm. Vui lòng đợi giữa mỗi lần tải.',
+        banned: '🚫 Bạn đã bị cấm sử dụng bot.',
+        queue_added: (pos, badge) => `📋 Đã thêm hàng đợi (vị trí: #${pos})${badge ? ` — ${badge}` : ''}`,
+        download_error: '❌ Lỗi tải video.',
+        sent_from_admin: '👨‍💻 *Admin:*',
+        saved_fav: '⭐ Đã lưu vào danh sách yêu thích!',
+        removed_fav: '🗑️ Đã xóa khỏi yêu thích.',
+        no_favs: '📭 Bạn chưa có video yêu thích nào.',
+        choose_quality: '🎚️ Chọn chất lượng:',
+    },
+    en: {
+        welcome: (name) => `👋 Hi *${name}*! I am *Nobita Bot v${BOT_VERSION} — ${BOT_EDITION}*`,
+        maintenance: '⚠️ *Bot is under maintenance!* Please come back later.',
+        supportedPlatforms: '📹 *Supported platforms:*',
+        typeHelp: '💡 Type /help to see all commands.',
+        menu_download: '📥 Download',
+        menu_help: '📖 Help',
+        menu_settings: '⚙️ Settings',
+        menu_favorites: '⭐ Favorites',
+        menu_achievements: '🏅 Achievements',
+        menu_status: '📊 Status',
+        menu_invite: '🎁 Invite',
+        menu_dashboard: '🖥️ Dashboard',
+        rate_limit: (w) => `⚠️ Too fast! Wait ${w}s.\n💡 Upgrade to VIP for no limits!`,
+        slow_mode: '⏱️ You are in slow mode. Please wait between downloads.',
+        banned: '🚫 You are banned from using this bot.',
+        queue_added: (pos, badge) => `📋 Added to queue (position: #${pos})${badge ? ` — ${badge}` : ''}`,
+        download_error: '❌ Failed to download video.',
+        sent_from_admin: '👨‍💻 *Admin:*',
+        saved_fav: '⭐ Saved to favorites!',
+        removed_fav: '🗑️ Removed from favorites.',
+        no_favs: '📭 You have no favorites yet.',
+        choose_quality: '🎚️ Choose quality:',
+    }
+};
+function t(userId, key, ...args) {
+    const lang = getUserPrefs(userId).lang || 'vi';
+    const pool = I18N[lang] || I18N.vi;
+    const v = pool[key] || I18N.vi[key];
+    if (typeof v === 'function') return v(...args);
+    return v;
+}
+
+// ============================================================
+// 🏅 ACHIEVEMENTS & LEVELS (v4.0)
+// ============================================================
+const LEVEL_THRESHOLDS = [0, 5, 15, 40, 80, 150, 300, 600, 1200, 2500, 5000];
+function getUserLevel(count) {
+    let lv = 0;
+    for (let i = 0; i < LEVEL_THRESHOLDS.length; i++) {
+        if (count >= LEVEL_THRESHOLDS[i]) lv = i;
+    }
+    return lv;
+}
+function getNextLevelTarget(count) {
+    const lv = getUserLevel(count);
+    return LEVEL_THRESHOLDS[Math.min(lv + 1, LEVEL_THRESHOLDS.length - 1)];
+}
+function getLevelBadge(lv) {
+    if (lv >= 9) return '👑 Legend';
+    if (lv >= 7) return '💎 Diamond';
+    if (lv >= 5) return '🥇 Gold';
+    if (lv >= 3) return '🥈 Silver';
+    if (lv >= 1) return '🥉 Bronze';
+    return '🌱 Rookie';
+}
+const ACHIEVEMENTS = [
+    { id: 'first', name: '🎬 Người mới', desc: 'Tải 1 video đầu tiên', check: (u) => u.count >= 1 },
+    { id: 'ten', name: '🔟 Nhà sưu tập', desc: 'Tải 10 video', check: (u) => u.count >= 10 },
+    { id: 'fifty', name: '🎯 Chuyên gia', desc: 'Tải 50 video', check: (u) => u.count >= 50 },
+    { id: 'hundred', name: '🏆 Cao thủ', desc: 'Tải 100 video', check: (u) => u.count >= 100 },
+    { id: 'fav10', name: '⭐ Người hâm mộ', desc: 'Lưu 10 video yêu thích', check: (u, fs) => (fs?.length || 0) >= 10 },
+    { id: 'streak7', name: '🔥 Kiên định', desc: 'Check-in 7 ngày liên tục', check: (u, fs, ds) => (ds?.streak || 0) >= 7 },
+    { id: 'referrer', name: '🎁 Người mời', desc: 'Mời 5 bạn bè', check: (u, fs, ds, rd) => (rd?.invitedCount || 0) >= 5 },
+    { id: 'allplatforms', name: '🌐 Đa nền tảng', desc: 'Tải từ 5 nền tảng khác nhau', check: (u) => (u.platformsUsed?.length || 0) >= 5 },
+];
+function getUserAchievements(userId) {
+    const u = stats.activeUsers.get(userId);
+    if (!u) return [];
+    const fs = userFavorites.get(userId) || [];
+    const ds = dailyStreaks.get(userId);
+    const rd = referralData.get(userId);
+    return ACHIEVEMENTS.filter(a => {
+        try { return a.check(u, fs, ds, rd); } catch { return false; }
+    });
+}
+
+// ============================================================
+// ⭐ FAVORITES helpers
+// ============================================================
+function addFavorite(userId, url, platform, title) {
+    const list = userFavorites.get(userId) || [];
+    if (list.some(it => it.url === url)) return false;
+    list.unshift({ url, platform, title: title || url, savedAt: Date.now() });
+    if (list.length > 100) list.pop();
+    userFavorites.set(userId, list);
+    saveData();
+    return true;
+}
+function removeFavorite(userId, url) {
+    const list = userFavorites.get(userId) || [];
+    const idx = list.findIndex(it => it.url === url);
+    if (idx === -1) return false;
+    list.splice(idx, 1);
+    userFavorites.set(userId, list);
+    saveData();
+    return true;
+}
+
+// ============================================================
+// 📊 Platform stats & 7-day rotation
+// ============================================================
+function incPlatformStat(platform) {
+    if (!platform) return;
+    platformStats[platform] = (platformStats[platform] || 0) + 1;
+    // maintain rolling daily bucket
+    const today = new Date().toISOString().slice(0, 10);
+    let bucket = daily7Stats.find(d => d.date === today);
+    if (!bucket) {
+        bucket = { date: today, requests: 0, downloads: 0 };
+        daily7Stats.push(bucket);
+        while (daily7Stats.length > 7) daily7Stats.shift();
+    }
+    bucket.requests++;
+}
+function bumpDailyDownloads() {
+    const today = new Date().toISOString().slice(0, 10);
+    let bucket = daily7Stats.find(d => d.date === today);
+    if (!bucket) {
+        bucket = { date: today, requests: 0, downloads: 0 };
+        daily7Stats.push(bucket);
+        while (daily7Stats.length > 7) daily7Stats.shift();
+    }
+    bucket.downloads++;
+}
+
+// ============================================================
+// 🗄️ Short ID helpers (for inline callback payloads)
+// ============================================================
+function cacheAction(payload) {
+    const id = Math.random().toString(36).slice(2, 10);
+    actionCache.set(id, { ...payload, createdAt: Date.now() });
+    if (actionCache.size > 1000) {
+        const firstKey = actionCache.keys().next().value;
+        actionCache.delete(firstKey);
+    }
+    return id;
+}
 
 // ============================================================
 // 🌐 EXPRESS SERVER + DASHBOARD API
@@ -178,7 +396,108 @@ app.get('/api/stats', requireAdminToken, (req, res) => {
         maintenanceMode,
         uptime: process.uptime(),
         version: BOT_VERSION,
+        edition: BOT_EDITION,
         activityLogs // Add activity logs to stats response
+    });
+});
+
+// v4.0: System health metrics (CPU / memory / platform)
+app.get('/api/system/health', requireAdminToken, (req, res) => {
+    const os = require('os');
+    const mem = process.memoryUsage();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const load = os.loadavg();
+    const cpus = os.cpus();
+    res.json({
+        platform: os.platform(),
+        arch: os.arch(),
+        nodeVersion: process.version,
+        cpuModel: cpus[0]?.model || 'unknown',
+        cpuCount: cpus.length,
+        loadAvg1m: load[0],
+        loadAvg5m: load[1],
+        loadAvg15m: load[2],
+        totalMemoryMB: Math.round(totalMem / 1024 / 1024),
+        freeMemoryMB: Math.round(freeMem / 1024 / 1024),
+        usedMemoryPct: Number(((totalMem - freeMem) / totalMem * 100).toFixed(1)),
+        heapUsedMB: Number((mem.heapUsed / 1024 / 1024).toFixed(1)),
+        heapTotalMB: Number((mem.heapTotal / 1024 / 1024).toFixed(1)),
+        rssMB: Number((mem.rss / 1024 / 1024).toFixed(1)),
+        uptime: process.uptime(),
+        hostname: os.hostname(),
+        version: BOT_VERSION,
+        edition: BOT_EDITION,
+    });
+});
+
+// v4.0: Platform breakdown stats
+app.get('/api/stats/platforms', requireAdminToken, (req, res) => {
+    const total = Object.values(platformStats).reduce((a, b) => a + b, 0) || 0;
+    const list = Object.entries(platformStats).map(([platform, count]) => {
+        const meta = PLATFORMS[platform];
+        return {
+            platform,
+            name: meta?.name || platform,
+            emoji: meta?.emoji || '🎬',
+            count,
+            percent: total > 0 ? Number((count / total * 100).toFixed(1)) : 0
+        };
+    }).sort((a, b) => b.count - a.count);
+    res.json({ total, platforms: list });
+});
+
+// v4.0: Rolling 7-day stats
+app.get('/api/stats/daily7', requireAdminToken, (req, res) => {
+    // Fill missing days with zero entries
+    const out = [];
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const iso = d.toISOString().slice(0, 10);
+        const bucket = daily7Stats.find(b => b.date === iso);
+        out.push({
+            date: iso,
+            label: d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+            requests: bucket?.requests || 0,
+            downloads: bucket?.downloads || 0
+        });
+    }
+    res.json({ days: out });
+});
+
+// v4.0: User detail endpoint (for modal in dashboard)
+app.get('/api/user/:id/details', requireAdminToken, (req, res) => {
+    const uid = parseInt(req.params.id);
+    const u = stats.activeUsers.get(uid);
+    if (!u) return res.status(404).json({ error: 'not found' });
+    const prefs = getUserPrefs(uid);
+    const achievements = getUserAchievements(uid).map(a => ({ id: a.id, name: a.name, desc: a.desc }));
+    const favs = userFavorites.get(uid) || [];
+    const streak = dailyStreaks.get(uid) || null;
+    const ref = referralData.get(uid) || null;
+    res.json({
+        id: uid,
+        username: u.username,
+        count: u.count,
+        history: (u.history || []).slice(0, 20),
+        lastUsed: u.lastUsed,
+        joinedAt: u.joinedAt,
+        level: getUserLevel(u.count),
+        nextLevelTarget: getNextLevelTarget(u.count),
+        badge: getLevelBadge(getUserLevel(u.count)),
+        isAdmin: isAdmin(uid),
+        isVip: vipUsers.has(uid),
+        isPremium: premiumUsers.has(uid),
+        isBanned: bannedUsers.has(uid),
+        isMuted: mutedUsers.has(uid),
+        warnings: userWarnings.get(uid) || 0,
+        rateLimit: userLimitOverrides.get(uid) ?? null,
+        slowMode: slowModeUsers.get(uid) || 0,
+        preferences: prefs,
+        achievements,
+        favoritesCount: favs.length,
+        streak: streak,
+        referral: ref,
     });
 });
 
@@ -437,6 +756,26 @@ function detectPlatform(text) {
     return null;
 }
 
+// v4.0: find ALL supported URLs in a message (batch mode). De-duped and capped at 10.
+function detectAllPlatforms(text) {
+    const results = [];
+    const seen = new Set();
+    for (const [key, p] of Object.entries(PLATFORMS)) {
+        const global = new RegExp(p.regex.source, p.regex.flags.includes('g') ? p.regex.flags : p.regex.flags + 'g');
+        let m;
+        while ((m = global.exec(text)) !== null) {
+            if (!m[0]) break;
+            if (!seen.has(m[0])) {
+                seen.add(m[0]);
+                results.push({ platform: key, match: m[0] });
+                if (results.length >= 10) return results;
+            }
+            if (global.lastIndex === m.index) global.lastIndex++;
+        }
+    }
+    return results;
+}
+
 // ============================================================
 // 🚦 QUEUE SYSTEM
 // ============================================================
@@ -506,26 +845,29 @@ function formatUptime(ms) {
     return `${m}m ${s % 60}s`;
 }
 
-function updateUserStats(userId, username) {
+function updateUserStats(userId, username, platform) {
     if (!stats.activeUsers.has(userId)) {
-        stats.activeUsers.set(userId, { username: username || 'Unknown', count: 0, lastUsed: Date.now(), history: [], joinedAt: Date.now() });
+        stats.activeUsers.set(userId, { username: username || 'Unknown', count: 0, lastUsed: Date.now(), history: [], joinedAt: Date.now(), platformsUsed: [] });
         addActivityLog('warn', `🆕 User mới tham gia: @${username || 'unknown'} (ID: ${userId})`);
     }
     const user = stats.activeUsers.get(userId);
     user.count++;
     user.lastUsed = Date.now();
     user.username = username || user.username;
+    if (!user.platformsUsed) user.platformsUsed = [];
+    if (platform && !user.platformsUsed.includes(platform)) user.platformsUsed.push(platform);
     const hour = new Date().getHours();
     hourlyStats[hour] = (hourlyStats[hour] || 0) + 1;
     dailyStats.requests++;
+    if (platform) incPlatformStat(platform);
     saveData();
 }
 
-function recordHistory(userId, videoUrl, platform) {
+function recordHistory(userId, videoUrl, platform, title) {
     const user = stats.activeUsers.get(userId);
     if (!user) return;
     if (!user.history) user.history = [];
-    user.history.unshift({ url: videoUrl, platform, time: Date.now() });
+    user.history.unshift({ url: videoUrl, platform, title: title || null, time: Date.now() });
     if (user.history.length > 20) user.history = user.history.slice(0, 20);
     saveData();
 }
@@ -550,27 +892,79 @@ async function handleSuspiciousUser(userId, username) {
 // ============================================================
 // 🤖 BOT COMMANDS
 // ============================================================
-// /start
-bot.onText(/^\/start$/, async (msg) => {
+// /start — v4.0: rich inline menu + referral support
+bot.onText(/^\/start(?:\s+(\S+))?$/, async (msg, match) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
     const username = msg.from?.first_name || 'bạn';
     const badge = getUserBadge(userId);
+    const refArg = match?.[1];
     const supportedPlatforms = Object.values(PLATFORMS).map(p => ` ${p.emoji} ${p.name}`).join('\n');
 
+    // Handle referral only for brand-new users
+    if (refArg && !stats.activeUsers.has(userId)) {
+        const refId = parseInt(refArg.replace(/^ref_/, ''));
+        if (refId && refId !== userId) {
+            const rd = referralData.get(refId) || { invitedCount: 0, invitees: [] };
+            if (!rd.invitees.includes(userId)) {
+                rd.invitees.push(userId);
+                rd.invitedCount = rd.invitees.length;
+                referralData.set(refId, rd);
+                const selfRd = referralData.get(userId) || { invitedCount: 0, invitees: [] };
+                selfRd.referrer = refId;
+                referralData.set(userId, selfRd);
+                saveData();
+                // notify inviter
+                bot.sendMessage(refId,
+                    `🎁 *Có người vừa dùng link mời của bạn!*\n` +
+                    `👤 @${msg.from?.username || msg.from?.first_name}\n` +
+                    `📊 Tổng đã mời: *${rd.invitedCount}* người`,
+                    { parse_mode: 'Markdown' }
+                ).catch(() => { });
+            }
+        }
+    }
+
+    const levelCount = stats.activeUsers.get(userId)?.count || 0;
+    const lvl = getUserLevel(levelCount);
+    const badgeStr = getLevelBadge(lvl);
+
     await bot.sendMessage(chatId,
-        `${badge ? badge + ' ' : ''}👋 Chào *${username}*! Mình là *Nobita Bot v${BOT_VERSION}*\n\n` +
-        (maintenanceMode ? '⚠️ *Bot đang bảo trì!* Vui lòng quay lại sau.\n\n' : '') +
-        `📹 *Hỗ trợ tải video từ:*\n${supportedPlatforms}\n\n` +
-        `💡 Gõ /help để xem đầy đủ lệnh.`,
+        `${badge ? badge + ' ' : ''}${t(userId, 'welcome', username)}\n\n` +
+        (maintenanceMode ? `${t(userId, 'maintenance')}\n\n` : '') +
+        `🎖️ Cấp bậc: ${badgeStr} (Lv.${lvl})\n\n` +
+        `${t(userId, 'supportedPlatforms')}\n${supportedPlatforms}\n\n` +
+        `${t(userId, 'typeHelp')}`,
         {
             parse_mode: 'Markdown',
-            reply_markup: isAdmin(userId) ? {
-                inline_keyboard: [[{ text: '🖥️ Admin Dashboard', url: DASHBOARD_URL }]]
-            } : {}
+            reply_markup: {
+                inline_keyboard: buildMainMenuKeyboard(userId)
+            }
         }
     );
 });
+
+// Reusable main menu keyboard generator
+function buildMainMenuKeyboard(userId) {
+    const rows = [
+        [
+            { text: t(userId, 'menu_favorites'), callback_data: 'nav_favorites' },
+            { text: t(userId, 'menu_achievements'), callback_data: 'nav_achievements' },
+        ],
+        [
+            { text: t(userId, 'menu_settings'), callback_data: 'nav_settings' },
+            { text: t(userId, 'menu_status'), callback_data: 'nav_status' },
+        ],
+        [
+            { text: t(userId, 'menu_invite'), callback_data: 'nav_invite' },
+            { text: t(userId, 'menu_help'), callback_data: 'nav_help' },
+        ]
+    ];
+    if (isAdmin(userId)) {
+        rows.push([{ text: t(userId, 'menu_dashboard'), url: DASHBOARD_URL }]);
+    }
+    return rows;
+}
 
 // /help - Tùy theo quyền Admin hay User thường
 bot.onText(/^\/help$/, async (msg) => {
@@ -578,21 +972,33 @@ bot.onText(/^\/help$/, async (msg) => {
     const userId = msg.from?.id;
     const isAdminUser = userId === ADMIN_USER_ID;
 
-    let text = `📖 *Hướng dẫn Nobita Bot v${BOT_VERSION}*\n\n`;
+    let text = `📖 *Hướng dẫn Nobita Bot v${BOT_VERSION} — ${BOT_EDITION}*\n\n`;
 
     // Lệnh cho tất cả người dùng
     text += `🔸 *Lệnh cơ bản:*\n`;
     text += `• /start — Khởi động bot\n`;
     text += `• /help — Xem hướng dẫn\n`;
-    text += `• /ping — Kiểm tra tốc độ\n`;
+    text += `• /ping — Kiểm tra tốc độ (đo theo API)\n`;
     text += `• /status — Trạng thái bot\n`;
     text += `• /platforms — Nền tảng hỗ trợ\n`;
     text += `• /myinfo — Thông tin tài khoản\n`;
     text += `• /history — Lịch sử tải của bạn\n`;
-    text += `• /top — Top người dùng tích cực\n`;
+    text += `• /top — BXH người dùng tích cực\n`;
     text += `• /report <nội dung> — Báo lỗi cho admin\n\n`;
 
-    text += `💡 Gửi link video bất kỳ để tải (không watermark).\n\n`;
+    text += `🆕 *Tính năng v4.0:*\n`;
+    text += `• /settings — Cài đặt cá nhân (ngôn ngữ, chất lượng...)\n`;
+    text += `• /lang vi|en — Đổi ngôn ngữ\n`;
+    text += `• /fav <url> — Lưu video yêu thích\n`;
+    text += `• /favorites — Danh sách yêu thích\n`;
+    text += `• /info <url> — Xem thông tin video (không tải)\n`;
+    text += `• /qr <text> — Tạo mã QR\n`;
+    text += `• /daily — Điểm danh nhận thưởng streak\n`;
+    text += `• /achievements — Huy hiệu & thành tích\n`;
+    text += `• /level — Cấp bậc & kinh nghiệm\n`;
+    text += `• /invite — Lấy link mời bạn bè\n\n`;
+
+    text += `💡 Gửi link video bất kỳ để tải (không watermark). Bot cũng tự động xử lý khi bạn gửi nhiều link trong một tin nhắn (batch mode).\n\n`;
 
     // Lệnh chỉ Admin thấy
     if (isAdminUser) {
@@ -636,14 +1042,39 @@ bot.onText(/^\/help$/, async (msg) => {
         } : {}
     });
 });
-// /ping
+// /ping — v4.0: đo theo API (Telegram + TikWM + SnapSave)
 bot.onText(/^\/ping$/, async (msg) => {
     const chatId = msg.chat.id;
     const start = Date.now();
     const m = await bot.sendMessage(chatId, '🏓 Pinging...');
-    bot.editMessageText(`🏓 Pong! \`${Date.now() - start}ms\`\n⏱️ Uptime: ${formatUptime(process.uptime() * 1000)}`, {
-        chat_id: chatId, message_id: m.message_id, parse_mode: 'Markdown'
+    const tgPing = Date.now() - start;
+
+    const timed = async (label, fn) => {
+        const t0 = Date.now();
+        try { await fn(); return { label, ok: true, ms: Date.now() - t0 }; }
+        catch (e) { return { label, ok: false, ms: Date.now() - t0, err: e.code || e.message }; }
+    };
+
+    const probes = await Promise.all([
+        timed('TikWM', () => axios.get('https://www.tikwm.com/', { timeout: 5000 })),
+        timed('SnapSave', () => axios.get('https://snapsave.app/', { timeout: 5000 })),
+        timed('Cobalt', () => axios.get('https://api.cobalt.tools/', { timeout: 5000, validateStatus: () => true })),
+    ]);
+
+    const mem = process.memoryUsage();
+    const memMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+    let text = `🏓 *Pong!*\n`;
+    text += `📡 Telegram API: \`${tgPing}ms\`\n`;
+    probes.forEach(p => {
+        text += `${p.ok ? '✅' : '❌'} ${p.label}: \`${p.ms}ms\`${p.ok ? '' : ` (${p.err})`}\n`;
     });
+    text += `⏱️ Uptime: ${formatUptime(process.uptime() * 1000)}\n`;
+    text += `💾 RAM: ${memMB} MB\n`;
+    text += `📋 Queue: ${requestQueue.length} / ${MAX_CONCURRENT}`;
+
+    bot.editMessageText(text, {
+        chat_id: chatId, message_id: m.message_id, parse_mode: 'Markdown'
+    }).catch(() => { });
 });
 
 // /status
@@ -743,6 +1174,265 @@ bot.onText(/^\/report (.+)/, (msg, match) => {
         );
         bot.sendMessage(chatId, '✅ Report đã được gửi tới Admin!');
     }
+});
+
+// ============================================================
+// 🆕 v4.0 USER COMMANDS: /settings /lang /fav /favorites /info /qr /daily /achievements /level /invite
+// ============================================================
+
+// /settings
+bot.onText(/^\/settings$/, (msg) => {
+    sendSettingsPanel(msg.chat.id, msg.from?.id);
+});
+
+function sendSettingsPanel(chatId, userId, editMessageId) {
+    const prefs = getUserPrefs(userId);
+    const onoff = v => v ? '🟢 BẬT' : '⚪ TẮT';
+    const qLabel = q => ({ hd: '🎥 HD', sd: '📼 SD', mp3: '🎵 MP3' }[q] || q);
+    const text =
+        `⚙️ *Cài đặt cá nhân*\n\n` +
+        `🌍 Ngôn ngữ: *${prefs.lang.toUpperCase()}*\n` +
+        `🎚️ Chất lượng mặc định: *${qLabel(prefs.defaultQuality)}*\n` +
+        `🎵 Nút tải MP3: ${onoff(prefs.showMP3Btn)}\n` +
+        `🔇 Silent mode: ${onoff(prefs.silentMode)}\n` +
+        `⭐ Tự lưu yêu thích: ${onoff(prefs.autoFav)}\n\n` +
+        `💡 Bấm nút bên dưới để thay đổi nhanh.`;
+    const keyboard = [
+        [
+            { text: `🌍 Lang: ${prefs.lang === 'vi' ? 'VI→EN' : 'EN→VI'}`, callback_data: 'set_lang' },
+            { text: `🎚️ Quality: ${prefs.defaultQuality.toUpperCase()}`, callback_data: 'set_quality' },
+        ],
+        [
+            { text: `🎵 MP3 btn: ${prefs.showMP3Btn ? 'OFF' : 'ON'}`, callback_data: 'set_mp3btn' },
+            { text: `🔇 Silent: ${prefs.silentMode ? 'OFF' : 'ON'}`, callback_data: 'set_silent' },
+        ],
+        [
+            { text: `⭐ AutoFav: ${prefs.autoFav ? 'OFF' : 'ON'}`, callback_data: 'set_autofav' },
+            { text: '🔄 Reset về mặc định', callback_data: 'set_reset' },
+        ],
+        [{ text: '✖️ Đóng', callback_data: 'set_close' }]
+    ];
+    if (editMessageId) {
+        bot.editMessageText(text, {
+            chat_id: chatId, message_id: editMessageId,
+            parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard }
+        }).catch(() => { });
+    } else {
+        bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: keyboard } });
+    }
+}
+
+// /lang vi|en
+bot.onText(/^\/lang(?:\s+(\w+))?$/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const lang = (match?.[1] || '').toLowerCase();
+    if (lang !== 'vi' && lang !== 'en') {
+        bot.sendMessage(chatId, 'Cú pháp: `/lang vi` hoặc `/lang en`', { parse_mode: 'Markdown' });
+        return;
+    }
+    setUserPref(userId, 'lang', lang);
+    bot.sendMessage(chatId, lang === 'vi' ? '🇻🇳 Đã đổi ngôn ngữ sang Tiếng Việt.' : '🇺🇸 Language set to English.');
+});
+
+// /fav [url] — thêm vào yêu thích (nếu không có url, dùng history[0])
+bot.onText(/^\/fav(?:\s+(.+))?$/, (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    let url = match?.[1]?.trim();
+    let platform;
+    if (!url) {
+        const hist = stats.activeUsers.get(userId)?.history || [];
+        if (!hist.length) return bot.sendMessage(chatId, '💡 Gửi kèm link: `/fav <url>` hoặc tải một video trước đã.', { parse_mode: 'Markdown' });
+        url = hist[0].url;
+        platform = hist[0].platform;
+    } else {
+        const det = detectPlatform(url);
+        if (!det) return bot.sendMessage(chatId, '❌ Link không được hỗ trợ.');
+        url = det.match;
+        platform = det.platform;
+    }
+    const ok = addFavorite(userId, url, platform);
+    bot.sendMessage(chatId, ok ? t(userId, 'saved_fav') : '⚠️ Link này đã có trong yêu thích.');
+});
+
+// /favorites
+bot.onText(/^\/favorites$/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const list = userFavorites.get(userId) || [];
+    if (!list.length) return bot.sendMessage(chatId, t(userId, 'no_favs'));
+    let text = `⭐ *Yêu thích (${list.length}/100)*\n\n`;
+    list.slice(0, 15).forEach((it, i) => {
+        const pMeta = PLATFORMS[it.platform];
+        const emoji = pMeta ? pMeta.emoji : '🎬';
+        const short = it.url.length > 50 ? it.url.substring(0, 50) + '...' : it.url;
+        text += `${i + 1}. ${emoji} \`${short}\`\n   🗓️ ${new Date(it.savedAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}\n\n`;
+    });
+    if (list.length > 15) text += `\n_...và ${list.length - 15} mục nữa._`;
+    bot.sendMessage(chatId, text, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[
+            { text: '🗑️ Xóa tất cả', callback_data: 'fav_clear' }
+        ]]}
+    });
+});
+
+// /info <url> — xem metadata không tải về
+bot.onText(/^\/info\s+(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1].trim();
+    const det = detectPlatform(url);
+    if (!det) return bot.sendMessage(chatId, '❌ Link không được hỗ trợ. Dùng /platforms để xem danh sách.');
+    const p = PLATFORMS[det.platform];
+    const processing = await bot.sendMessage(chatId, `🔍 Đang lấy thông tin ${p.emoji} ${p.name}...`);
+    try {
+        const info = await getVideoInfo(det.match, det.platform);
+        let text = `ℹ️ *Thông tin video*\n\n`;
+        text += `${p.emoji} *Nền tảng:* ${p.name}\n`;
+        if (info?.title) text += `📝 *Tiêu đề:* ${info.title.substring(0, 200)}\n`;
+        if (info?.author) text += `👤 *Tác giả:* ${info.author}\n`;
+        if (info?.duration) text += `⏱️ *Thời lượng:* ${info.duration}s\n`;
+        if (info?.sizeMB) text += `💾 *Kích thước:* ~${info.sizeMB.toFixed(1)} MB\n`;
+        if (info?.url) text += `\n🔗 [Link trực tiếp](${info.url})`;
+        bot.editMessageText(text, { chat_id: chatId, message_id: processing.message_id, parse_mode: 'Markdown', disable_web_page_preview: true }).catch(() => { });
+    } catch (e) {
+        bot.editMessageText('❌ Không lấy được thông tin video. ' + e.message, { chat_id: chatId, message_id: processing.message_id }).catch(() => { });
+    }
+});
+
+// Simple metadata fetcher used by /info (best-effort)
+async function getVideoInfo(url, platform) {
+    try {
+        if (platform === 'tiktok') {
+            const res = await axios.post('https://www.tikwm.com/api/', { url, hd: 1 }, { timeout: 15000 });
+            const d = res.data?.data;
+            if (!d) return null;
+            return {
+                title: d.title,
+                author: d.author?.nickname,
+                duration: d.duration,
+                sizeMB: d.size ? d.size / 1024 / 1024 : undefined,
+                url: d.hdplay || d.play
+            };
+        }
+        // Fallback: try yt-dlp for everything else (facebook, youtube, instagram, etc.)
+        const ytdl = require('youtube-dl-exec');
+        const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
+        return {
+            title: info.title,
+            author: info.uploader || info.channel,
+            duration: info.duration,
+            sizeMB: info.filesize ? info.filesize / 1024 / 1024 : (info.filesize_approx ? info.filesize_approx / 1024 / 1024 : undefined),
+            url: info.url
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+// /qr <text>
+bot.onText(/^\/qr\s+(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const content = match[1].trim();
+    if (content.length > 500) return bot.sendMessage(chatId, '❌ Nội dung quá dài (tối đa 500 ký tự).');
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=500x500&margin=12&data=${encodeURIComponent(content)}`;
+    try {
+        await bot.sendPhoto(chatId, qrUrl, {
+            caption: `🔳 *QR Code*\n\`\`\`\n${content.substring(0, 200)}${content.length > 200 ? '...' : ''}\n\`\`\``,
+            parse_mode: 'Markdown'
+        });
+    } catch (e) {
+        bot.sendMessage(chatId, '❌ Không tạo được QR: ' + e.message);
+    }
+});
+
+// /daily — check-in streak
+bot.onText(/^\/daily$/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    let entry = dailyStreaks.get(userId) || { streak: 0, lastClaim: null, points: 0 };
+    if (entry.lastClaim === today) {
+        return bot.sendMessage(chatId,
+            `✅ Bạn đã điểm danh hôm nay rồi!\n🔥 Streak hiện tại: *${entry.streak}* ngày\n⭐ Tổng điểm: *${entry.points}*`,
+            { parse_mode: 'Markdown' }
+        );
+    }
+    if (entry.lastClaim === yesterday) entry.streak += 1;
+    else entry.streak = 1;
+    entry.lastClaim = today;
+    const bonus = 10 + Math.min(entry.streak * 2, 50); // tăng dần, cap 60
+    entry.points = (entry.points || 0) + bonus;
+    dailyStreaks.set(userId, entry);
+    saveData();
+    bot.sendMessage(chatId,
+        `🎉 *Điểm danh thành công!*\n\n` +
+        `🔥 Streak: *${entry.streak}* ngày liên tục\n` +
+        `💰 +${bonus} điểm (Tổng: *${entry.points}*)\n` +
+        `⏰ Quay lại vào ngày mai để duy trì streak!`,
+        { parse_mode: 'Markdown' }
+    );
+});
+
+// /achievements
+bot.onText(/^\/achievements$/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const unlocked = getUserAchievements(userId);
+    const unlockedIds = new Set(unlocked.map(a => a.id));
+    let text = `🏅 *Thành tích của bạn (${unlocked.length}/${ACHIEVEMENTS.length})*\n\n`;
+    ACHIEVEMENTS.forEach(a => {
+        const got = unlockedIds.has(a.id);
+        text += `${got ? '✅' : '🔒'} ${a.name} — ${a.desc}\n`;
+    });
+    bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+});
+
+// /level
+bot.onText(/^\/level$/, (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const u = stats.activeUsers.get(userId);
+    const count = u?.count || 0;
+    const lvl = getUserLevel(count);
+    const badge = getLevelBadge(lvl);
+    const next = getNextLevelTarget(count);
+    const progress = Math.min(1, count / Math.max(next, 1));
+    const bar = '█'.repeat(Math.round(progress * 10)) + '░'.repeat(10 - Math.round(progress * 10));
+    bot.sendMessage(chatId,
+        `🎖️ *Cấp bậc*\n\n` +
+        `${badge} — *Lv.${lvl}*\n` +
+        `📥 Đã tải: *${count}* video\n` +
+        `📊 Tiến độ: \`${bar}\` ${Math.round(progress * 100)}%\n` +
+        (lvl < LEVEL_THRESHOLDS.length - 1 ? `🎯 Mục tiêu kế: *${next}* video → Lv.${lvl + 1}` : `🏆 Bạn đã đạt cấp cao nhất!`),
+        { parse_mode: 'Markdown' }
+    );
+});
+
+// /invite
+bot.onText(/^\/invite$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    let me;
+    try { me = await bot.getMe(); } catch { me = { username: 'your_bot' }; }
+    const link = `https://t.me/${me.username}?start=ref_${userId}`;
+    const rd = referralData.get(userId) || { invitedCount: 0, invitees: [] };
+    bot.sendMessage(chatId,
+        `🎁 *Mời bạn — Nhận thưởng!*\n\n` +
+        `🔗 Link cá nhân của bạn:\n\`${link}\`\n\n` +
+        `👥 Đã mời: *${rd.invitedCount}* người\n` +
+        `💡 Khi có người vào bot qua link của bạn, bạn sẽ nhận thông báo & điểm thưởng.`,
+        {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [[
+                    { text: '📤 Chia sẻ link', url: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent('Tải video không logo cực nhanh với Nobita Bot! 🤖')}` }
+                ]]
+            }
+        }
+    );
 });
 
 // ============================================================
@@ -1059,13 +1749,15 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
 });
 
 // ============================================================
-// 🎵 MP3 CALLBACK HANDLER
+// 🎵 CALLBACK HANDLER (MP3 + v4.0 inline actions)
 // ============================================================
 bot.on('callback_query', async (query) => {
     const data = query.data;
     const chatId = query.message.chat.id;
     const messageId = query.message.message_id;
+    const userId = query.from?.id;
 
+    // --- MP3 extraction (existing) ---
     if (data.startsWith('mp3_')) {
         const mp3Id = data.replace('mp3_', '');
         const info = mp3Cache.get(mp3Id);
@@ -1091,6 +1783,106 @@ bot.on('callback_query', async (query) => {
         } finally {
             bot.deleteMessage(chatId, proc.message_id).catch(() => { });
         }
+        return;
+    }
+
+    // --- Main menu navigation (from /start inline menu) ---
+    if (data.startsWith('nav_')) {
+        const page = data.replace('nav_', '');
+        bot.answerCallbackQuery(query.id).catch(() => { });
+        if (page === 'help') {
+            return bot.sendMessage(chatId, '📖 Mở /help để xem hướng dẫn đầy đủ.');
+        }
+        if (page === 'settings') return sendSettingsPanel(chatId, userId);
+        if (page === 'status') return bot.emit('text', { ...query.message, text: '/status', from: query.from });
+        if (page === 'favorites') {
+            const list = userFavorites.get(userId) || [];
+            if (!list.length) return bot.sendMessage(chatId, t(userId, 'no_favs'));
+            let text = `⭐ *Yêu thích (${list.length}/100)*\n\n`;
+            list.slice(0, 10).forEach((it, i) => {
+                const pMeta = PLATFORMS[it.platform];
+                text += `${i + 1}. ${pMeta?.emoji || '🎬'} \`${it.url.substring(0, 55)}${it.url.length > 55 ? '...' : ''}\`\n`;
+            });
+            return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+        }
+        if (page === 'achievements') {
+            const unlocked = getUserAchievements(userId);
+            const ids = new Set(unlocked.map(a => a.id));
+            let text = `🏅 *Thành tích (${unlocked.length}/${ACHIEVEMENTS.length})*\n\n`;
+            ACHIEVEMENTS.forEach(a => { text += `${ids.has(a.id) ? '✅' : '🔒'} ${a.name}\n`; });
+            return bot.sendMessage(chatId, text, { parse_mode: 'Markdown' });
+        }
+        if (page === 'invite') {
+            const me = await bot.getMe().catch(() => ({ username: 'your_bot' }));
+            const link = `https://t.me/${me.username}?start=ref_${userId}`;
+            const rd = referralData.get(userId) || { invitedCount: 0 };
+            return bot.sendMessage(chatId,
+                `🎁 *Link mời của bạn:*\n\`${link}\`\n👥 Đã mời: *${rd.invitedCount || 0}* người`,
+                { parse_mode: 'Markdown' }
+            );
+        }
+        return;
+    }
+
+    // --- Settings toggles ---
+    if (data.startsWith('set_')) {
+        const action = data.replace('set_', '');
+        const prefs = getUserPrefs(userId);
+        if (action === 'lang') setUserPref(userId, 'lang', prefs.lang === 'vi' ? 'en' : 'vi');
+        else if (action === 'quality') {
+            const order = ['hd', 'sd', 'mp3'];
+            const next = order[(order.indexOf(prefs.defaultQuality) + 1) % order.length];
+            setUserPref(userId, 'defaultQuality', next);
+        }
+        else if (action === 'mp3btn') setUserPref(userId, 'showMP3Btn', !prefs.showMP3Btn);
+        else if (action === 'silent') setUserPref(userId, 'silentMode', !prefs.silentMode);
+        else if (action === 'autofav') setUserPref(userId, 'autoFav', !prefs.autoFav);
+        else if (action === 'reset') {
+            userPreferences.delete(userId);
+            saveData();
+        }
+        else if (action === 'close') {
+            bot.answerCallbackQuery(query.id, { text: '✖️ Đã đóng' }).catch(() => { });
+            return bot.deleteMessage(chatId, messageId).catch(() => { });
+        }
+        bot.answerCallbackQuery(query.id, { text: '✔️ Đã cập nhật' }).catch(() => { });
+        return sendSettingsPanel(chatId, userId, messageId);
+    }
+
+    // --- Favorite save button from download result ---
+    if (data.startsWith('favsave_')) {
+        const favId = data.replace('favsave_', '');
+        const payload = actionCache.get(favId);
+        if (!payload) return bot.answerCallbackQuery(query.id, { text: '⚠️ Đã hết hạn.', show_alert: true });
+        const ok = addFavorite(userId, payload.url, payload.platform);
+        bot.answerCallbackQuery(query.id, { text: ok ? '⭐ Đã lưu!' : '⚠️ Đã có trong yêu thích.' }).catch(() => { });
+        return;
+    }
+
+    // --- Retry a failed download ---
+    if (data.startsWith('retry_')) {
+        const retryId = data.replace('retry_', '');
+        const payload = actionCache.get(retryId);
+        if (!payload) return bot.answerCallbackQuery(query.id, { text: '⚠️ Đã hết hạn.', show_alert: true });
+        bot.answerCallbackQuery(query.id, { text: '🔁 Thử lại...' }).catch(() => { });
+        const item = {
+            chatId, userId, username: query.from?.username || 'unknown',
+            url: payload.url, platform: payload.platform,
+            messageId, timestamp: Date.now(),
+            isVip: isVip(userId), isAdmin: isAdmin(userId), isPremium: isPremium(userId),
+            quality: payload.quality || getUserPrefs(userId).defaultQuality,
+        };
+        requestQueue.push(item);
+        processQueue();
+        return;
+    }
+
+    // --- Clear favorites ---
+    if (data === 'fav_clear') {
+        userFavorites.set(userId, []);
+        saveData();
+        bot.answerCallbackQuery(query.id, { text: '🗑️ Đã xóa tất cả yêu thích' }).catch(() => { });
+        return bot.editMessageText('📭 Danh sách yêu thích đã được xóa.', { chat_id: chatId, message_id: messageId }).catch(() => { });
     }
 });
 
@@ -1105,11 +1897,10 @@ bot.on('message', async (msg) => {
 
     if (!text) return;
 
-    const detected = detectPlatform(text);
+    // v4.0: detect multiple URLs (batch mode)
+    const allDetected = detectAllPlatforms(text);
 
-    if (detected) {
-        const { platform, match: videoUrl } = detected;
-
+    if (allDetected.length > 0) {
         // Maintenance check
         if (maintenanceMode && !isVip(userId) && !isAdmin(userId)) {
             bot.sendMessage(chatId, '🔧 *Bot đang bảo trì!* Vui lòng quay lại sau.', { parse_mode: 'Markdown', reply_to_message_id: msg.message_id }).catch(() => { });
@@ -1122,7 +1913,7 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        // Rate limit
+        // Rate limit (only check once per message, batch counts as 1 "message")
         if (!isAdmin(userId) && !checkRateLimit(userId)) {
             const isSlowed = slowModeUsers.has(userId);
             bot.sendMessage(chatId,
@@ -1135,37 +1926,53 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        stats.totalRequests++;
-        updateUserStats(userId, username);
+        const prefs = getUserPrefs(userId);
+        const isBatch = allDetected.length > 1;
 
-        const p = PLATFORMS[platform];
-        console.log(`[${new Date().toISOString()}] ${p.emoji} ${platform.toUpperCase()} from @${username} (${userId}): ${videoUrl}`);
-        
-        // Log the new request to dashboard
-        addActivityLog('ok', `📥 Yêu cầu tải ${p.name} từ @${username} (ID: ${userId})`);
-
-        const item = {
-            chatId, userId, username, url: videoUrl, platform,
-            messageId: msg.message_id, timestamp: Date.now(),
-            isVip: isVip(userId), isAdmin: isAdmin(userId), isPremium: isPremium(userId)
-        };
-
-        // Priority insertion: Admin > VIP > Premium > Regular
-        if (item.isAdmin) {
-            requestQueue.unshift(item);
-        } else if (item.isVip) {
-            const firstNonAdmin = requestQueue.findIndex(r => !r.isAdmin);
-            requestQueue.splice(firstNonAdmin === -1 ? 0 : firstNonAdmin, 0, item);
-        } else if (item.isPremium) {
-            const firstRegular = requestQueue.findIndex(r => !r.isAdmin && !r.isVip);
-            requestQueue.splice(firstRegular === -1 ? requestQueue.length : firstRegular, 0, item);
-        } else {
-            requestQueue.push(item);
+        if (isBatch) {
+            bot.sendMessage(chatId,
+                `🧺 *Chế độ batch:* phát hiện *${allDetected.length}* link\n` +
+                `⏳ Các video sẽ được xử lý lần lượt...`,
+                { parse_mode: 'Markdown', reply_to_message_id: msg.message_id }
+            ).catch(() => { });
         }
 
-        const position = requestQueue.indexOf(item) + 1;
-        if (requestQueue.length > 1 || processingCount >= MAX_CONCURRENT) {
-            const badge = item.isAdmin ? '👑 Admin' : item.isVip ? '⭐ VIP' : item.isPremium ? '💎 Premium' : '';
+        for (const det of allDetected) {
+            const { platform, match: videoUrl } = det;
+            stats.totalRequests++;
+            updateUserStats(userId, username, platform);
+
+            const p = PLATFORMS[platform];
+            console.log(`[${new Date().toISOString()}] ${p.emoji} ${platform.toUpperCase()} from @${username} (${userId}): ${videoUrl}`);
+            addActivityLog('ok', `📥 Yêu cầu tải ${p.name} từ @${username} (ID: ${userId})`);
+
+            const item = {
+                chatId, userId, username, url: videoUrl, platform,
+                messageId: msg.message_id, timestamp: Date.now(),
+                isVip: isVip(userId), isAdmin: isAdmin(userId), isPremium: isPremium(userId),
+                quality: prefs.defaultQuality,
+                batch: isBatch,
+            };
+
+            // Priority insertion: Admin > VIP > Premium > Regular
+            if (item.isAdmin) {
+                requestQueue.unshift(item);
+            } else if (item.isVip) {
+                const firstNonAdmin = requestQueue.findIndex(r => !r.isAdmin);
+                requestQueue.splice(firstNonAdmin === -1 ? 0 : firstNonAdmin, 0, item);
+            } else if (item.isPremium) {
+                const firstRegular = requestQueue.findIndex(r => !r.isAdmin && !r.isVip);
+                requestQueue.splice(firstRegular === -1 ? requestQueue.length : firstRegular, 0, item);
+            } else {
+                requestQueue.push(item);
+            }
+        }
+
+        // Queue-status ping (for the first item only, to avoid spam on batch)
+        const first = requestQueue[0] || { isAdmin: false, isVip: false, isPremium: false };
+        const position = 1;
+        if (!isBatch && (requestQueue.length > 1 || processingCount >= MAX_CONCURRENT)) {
+            const badge = first.isAdmin ? '👑 Admin' : first.isVip ? '⭐ VIP' : first.isPremium ? '💎 Premium' : '';
             bot.sendMessage(chatId,
                 `📋 Đã thêm hàng đợi (vị trí: #${position})${badge ? ` — ${badge}` : ''}`,
                 { reply_to_message_id: msg.message_id }
@@ -1261,20 +2068,42 @@ async function processQueue() {
                 mp3Cache.delete(firstKey);
             }
 
+            // v4.0: enhanced caption with video title if available
+            const prefs = getUserPrefs(request.userId);
+            const pInfo = PLATFORMS[request.platform];
+            let caption = botSettings.captionText || '';
+            if (videoData.title) {
+                const cleanTitle = String(videoData.title).replace(/[*_`~\[\]]/g, '').substring(0, 150);
+                caption = `🎬 *${cleanTitle}*\n${pInfo?.emoji || ''} ${pInfo?.name || request.platform}\n\n${caption}`;
+            }
+
+            const favShortId = cacheAction({ url: request.url, platform: request.platform });
+            const btnRows = [];
+            if (prefs.showMP3Btn && botSettings.mp3Button) {
+                btnRows.push([{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }, { text: '⭐ Lưu yêu thích', callback_data: `favsave_${favShortId}` }]);
+            } else {
+                btnRows.push([{ text: '⭐ Lưu yêu thích', callback_data: `favsave_${favShortId}` }]);
+            }
+
             await bot.sendVideo(request.chatId, tempFile, {
-                caption: botSettings.captionText,
+                caption,
+                parse_mode: 'Markdown',
                 reply_to_message_id: request.messageId,
                 supports_streaming: true,
-                reply_markup: botSettings.mp3Button ? { inline_keyboard: [[{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }]] } : undefined
+                reply_markup: { inline_keyboard: btnRows }
             });
 
             fs.unlink(tempFile, () => { });
+
+            // auto-save favorite if user opted-in
+            if (prefs.autoFav) addFavorite(request.userId, request.url, request.platform, videoData.title);
         }
 
         if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
         stats.successfulDownloads++;
         dailyStats.downloads++;
-        recordHistory(request.userId, request.url, request.platform);
+        bumpDailyDownloads();
+        recordHistory(request.userId, request.url, request.platform, videoData?.title);
         saveData();
         console.log(`[✅] ${request.platform} video sent to @${request.username}`);
         
@@ -1295,9 +2124,14 @@ async function processQueue() {
         else if (err.message.includes('quá lớn')) errMsg += err.message;
         else errMsg += 'Lỗi không xác định. Hãy thử link khác.';
 
+        // v4.0: offer retry button
+        const retryShortId = cacheAction({ url: request.url, platform: request.platform, quality: request.quality });
+        const retryMarkup = { inline_keyboard: [[{ text: '🔁 Thử lại', callback_data: `retry_${retryShortId}` }]] };
+
         if (processingMsg) {
             bot.editMessageText(errMsg + '\n\n💡 Đảm bảo link hợp lệ và không bị private.', {
-                chat_id: request.chatId, message_id: processingMsg.message_id
+                chat_id: request.chatId, message_id: processingMsg.message_id,
+                reply_markup: retryMarkup
             }).catch(() => { });
         }
 

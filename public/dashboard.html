@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nobita Bot v3.0 — Admin Dashboard</title>
+  <title>Nobita Bot v4.0 Ultra — Admin Dashboard</title>
   <link
     href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap"
     rel="stylesheet">
@@ -30,8 +30,33 @@
       --amber: #f59e0b;
       --red: #ef4444;
       --purple: #a855f7;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
       --font: 'DM Sans', sans-serif;
       --mono: 'JetBrains Mono', monospace;
+    }
+
+    /* v4.0: Light theme overrides */
+    html[data-theme="light"] {
+      --bg: #f5f7fb;
+      --bg2: #ffffff;
+      --bg3: #eef2f8;
+      --border: #dee3ee;
+      --border2: #c3c9d6;
+      --text: #11203a;
+      --text2: #475569;
+      --text3: #64748b;
+      --blue: #2563eb;
+      --blue2: #1e40af;
+      --green: #059669;
+      --amber: #d97706;
+      --red: #dc2626;
+      --purple: #7c3aed;
+      --shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+    }
+
+    /* Smooth theme transitions */
+    body, .sidebar, .content, .topbar, .metric, .chart-card, .card, .modal, .fab, .cpalette {
+      transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease;
     }
 
     html,
@@ -948,6 +973,260 @@
       background: var(--border2);
       border-radius: 3px
     }
+
+    /* ======================================================
+       v4.0 COMPONENTS
+       ====================================================== */
+
+    /* Theme toggle button */
+    .theme-toggle {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      transition: all .15s;
+    }
+    .theme-toggle:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+    /* Refresh interval selector */
+    .refresh-select {
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+
+    /* Command Palette (Ctrl+K) */
+    .cpalette-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, .55);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 12vh;
+      z-index: 9999;
+      animation: fadeIn .15s ease;
+    }
+    .cpalette-backdrop.active { display: flex; }
+    .cpalette {
+      width: 92%;
+      max-width: 560px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      animation: slideDown .18s ease;
+    }
+    .cpalette input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 18px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      outline: none;
+    }
+    .cpalette-list { max-height: 360px; overflow-y: auto; }
+    .cpalette-item {
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text);
+      border-left: 2px solid transparent;
+    }
+    .cpalette-item:hover, .cpalette-item.selected {
+      background: var(--bg3);
+      border-left-color: var(--blue);
+    }
+    .cpalette-icon {
+      width: 26px; height: 26px;
+      background: var(--bg3);
+      border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 13px;
+    }
+    .cpalette-hint {
+      margin-left: auto;
+      font-size: 10px;
+      color: var(--text3);
+      font-family: var(--mono);
+      padding: 2px 6px;
+      background: var(--bg3);
+      border-radius: 4px;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, .55);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+      animation: fadeIn .15s ease;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal {
+      width: 92%;
+      max-width: 640px;
+      max-height: 85vh;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      animation: slideUp .2s ease;
+    }
+    .modal-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-weight: 600; font-size: 15px; }
+    .modal-close {
+      background: transparent; border: none; color: var(--text2);
+      cursor: pointer; font-size: 18px; padding: 4px 8px; border-radius: 6px;
+    }
+    .modal-close:hover { background: var(--bg3); color: var(--text); }
+    .modal-body { padding: 18px; overflow-y: auto; }
+
+    /* Skeleton loaders */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg3) 0%, var(--border) 50%, var(--bg3) 100%);
+      background-size: 200% 100%;
+      animation: skel 1.3s ease-in-out infinite;
+      border-radius: 6px;
+    }
+    .skel-line { height: 12px; margin: 8px 0; }
+    .skel-line.w-60 { width: 60%; }
+    .skel-line.w-40 { width: 40%; }
+    .skel-card { height: 64px; margin: 6px 0; border-radius: 10px; }
+    @keyframes skel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+    /* Floating Action Button */
+    .fab {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--blue), var(--purple));
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-size: 22px;
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4);
+      z-index: 900;
+      transition: transform .2s;
+    }
+    .fab:hover { transform: scale(1.08) rotate(8deg); }
+    .fab-menu {
+      position: fixed;
+      bottom: 88px; right: 24px;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 899;
+    }
+    .fab-menu.active { display: flex; animation: slideUp .2s ease; }
+    .fab-menu button {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: var(--font);
+      box-shadow: var(--shadow);
+      text-align: left;
+      min-width: 180px;
+    }
+    .fab-menu button:hover { background: var(--bg3); }
+
+    /* Toast */
+    .toast-wrap {
+      position: fixed; top: 20px; right: 20px;
+      z-index: 10000;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .toast {
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      font-size: 13px;
+      min-width: 220px;
+      animation: slideIn .2s ease;
+    }
+    .toast.ok { border-left: 3px solid var(--green); }
+    .toast.err { border-left: 3px solid var(--red); }
+    .toast.info { border-left: 3px solid var(--blue); }
+
+    /* Sidebar collapse */
+    .sidebar.collapsed { width: 60px; }
+    .sidebar.collapsed .logo-text,
+    .sidebar.collapsed .logo-ver,
+    .sidebar.collapsed .nav-section,
+    .sidebar.collapsed .nav-item span:not(.nav-icon),
+    .sidebar.collapsed .sidebar-footer { display: none; }
+    .sidebar.collapsed .nav-item { justify-content: center; padding: 9px 6px; }
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: -220px; z-index: 800; height: 100%; transition: left .2s; }
+      .sidebar.mobile-open { left: 0; box-shadow: 4px 0 20px rgba(0,0,0,0.4); }
+      .mobile-hamburger { display: inline-flex !important; }
+    }
+    .mobile-hamburger { display: none; background: var(--bg3); border: 1px solid var(--border); color: var(--text); width: 32px; height: 32px; border-radius: 8px; cursor: pointer; align-items: center; justify-content: center; }
+
+    /* Health widget */
+    .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+    .health-item { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .health-label { font-size: 10.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+    .health-value { font-size: 20px; font-weight: 600; margin-top: 4px; color: var(--text); }
+    .health-bar { margin-top: 8px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .health-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--purple)); transition: width .4s; }
+
+    /* Analytics charts */
+    .line-chart { position: relative; height: 220px; padding: 12px 0; }
+    .line-svg { width: 100%; height: 100%; }
+    .line-svg path.area { fill: url(#grad-blue); opacity: .2; }
+    .line-svg path.stroke { fill: none; stroke: var(--blue); stroke-width: 2; }
+    .line-svg circle { fill: var(--blue); }
+    .line-svg text { fill: var(--text3); font-size: 10px; font-family: var(--mono); }
+    .donut-wrap { display: grid; grid-template-columns: 180px 1fr; gap: 18px; align-items: center; }
+    .donut { width: 180px; height: 180px; }
+    .donut-legend { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+    .donut-legend div { display: flex; align-items: center; gap: 8px; }
+    .donut-legend span.sw { width: 10px; height: 10px; border-radius: 2px; }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+    @keyframes slideDown { from { transform: translateY(-16px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+    @keyframes slideUp { from { transform: translateY(16px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+    @keyframes slideIn { from { transform: translateX(16px); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+
+    /* Achievements helper */
+    .platform-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: var(--bg3); border: 1px solid var(--border); font-size: 11px; color: var(--text2); }
   </style>
 </head>
 
@@ -955,27 +1234,29 @@
   <div class="shell">
 
     <!-- SIDEBAR -->
-    <div class="sidebar">
+    <div class="sidebar" id="sidebar">
       <div class="logo">
         <div class="logo-icon">🤖</div>
         <div>
           <div class="logo-text">Nobita Bot</div>
-          <div class="logo-ver" id="bot-version">v3.0 admin</div>
+          <div class="logo-ver" id="bot-version">v4.0 Ultra</div>
         </div>
       </div>
       <nav>
         <div class="nav-section">Main</div>
-        <div class="nav-item active" onclick="gotoPage('overview',this)">
-          <span class="nav-icon">📊</span>Tổng quan<span class="status-dot" id="online-dot" style="display:none"></span>
+        <div class="nav-item active" onclick="gotoPage('overview',this)" data-page="overview">
+          <span class="nav-icon">📊</span><span>Tổng quan</span><span class="status-dot" id="online-dot" style="display:none"></span>
         </div>
-        <div class="nav-item" onclick="gotoPage('users',this)"><span class="nav-icon">👥</span>Người dùng</div>
-        <div class="nav-item" onclick="gotoPage('queue',this)"><span class="nav-icon">📋</span>Hàng đợi</div>
+        <div class="nav-item" onclick="gotoPage('analytics',this)" data-page="analytics"><span class="nav-icon">📈</span><span>Phân tích</span></div>
+        <div class="nav-item" onclick="gotoPage('users',this)" data-page="users"><span class="nav-icon">👥</span><span>Người dùng</span></div>
+        <div class="nav-item" onclick="gotoPage('queue',this)" data-page="queue"><span class="nav-icon">📋</span><span>Hàng đợi</span></div>
         <div class="nav-section">Quản lý</div>
-        <div class="nav-item" onclick="gotoPage('broadcast',this)"><span class="nav-icon">📢</span>Broadcast</div>
-        <div class="nav-item" onclick="gotoPage('moderation',this)"><span class="nav-icon">🛡️</span>Kiểm duyệt</div>
+        <div class="nav-item" onclick="gotoPage('broadcast',this)" data-page="broadcast"><span class="nav-icon">📢</span><span>Broadcast</span></div>
+        <div class="nav-item" onclick="gotoPage('moderation',this)" data-page="moderation"><span class="nav-icon">🛡️</span><span>Kiểm duyệt</span></div>
         <div class="nav-section">Hệ thống</div>
-        <div class="nav-item" onclick="gotoPage('settings',this)"><span class="nav-icon">⚙️</span>Cài đặt</div>
-        <div class="nav-item" onclick="gotoPage('logs',this)"><span class="nav-icon">📝</span>Nhật ký</div>
+        <div class="nav-item" onclick="gotoPage('health',this)" data-page="health"><span class="nav-icon">❤️</span><span>Sức khỏe</span></div>
+        <div class="nav-item" onclick="gotoPage('settings',this)" data-page="settings"><span class="nav-icon">⚙️</span><span>Cài đặt</span></div>
+        <div class="nav-item" onclick="gotoPage('logs',this)" data-page="logs"><span class="nav-icon">📝</span><span>Nhật ký</span></div>
       </nav>
       <div class="sidebar-footer">
         <div class="footer-info" id="sidebar-clock">--:--:--</div>
@@ -989,10 +1270,20 @@
       <!-- ===== OVERVIEW ===== -->
       <div class="page active" id="page-overview">
         <div class="topbar">
+          <button class="mobile-hamburger" onclick="toggleSidebar()" title="Menu">☰</button>
           <div class="topbar-title">Tổng quan hệ thống</div>
           <div class="topbar-right">
             <span class="uptime-badge" id="uptime-display">⬤ Đang kết nối...</span>
             <span class="badge" id="maint-badge" style="display:none"></span>
+            <select class="refresh-select" id="refresh-select" onchange="setRefreshInterval(this.value)" title="Tần suất refresh">
+              <option value="5000">5s</option>
+              <option value="10000" selected>10s</option>
+              <option value="30000">30s</option>
+              <option value="60000">1m</option>
+              <option value="0">Tắt</option>
+            </select>
+            <button class="btn sm" onclick="openCommandPalette()" title="Lệnh nhanh (Ctrl+K)">⌘</button>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Đổi giao diện (T)">🌓</button>
             <button class="btn sm" onclick="loadStats()" title="Làm mới">↻</button>
           </div>
         </div>
@@ -1108,6 +1399,69 @@
         </div>
       </div>
 
+      <!-- ===== ANALYTICS (v4.0) ===== -->
+      <div class="page" id="page-analytics">
+        <div class="topbar">
+          <button class="mobile-hamburger" onclick="toggleSidebar()" title="Menu">☰</button>
+          <div class="topbar-title">📈 Phân tích chuyên sâu</div>
+          <div class="topbar-right">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Đổi giao diện">🌓</button>
+            <button class="btn sm" onclick="loadAnalytics()">↻</button>
+          </div>
+        </div>
+        <div class="charts" style="grid-template-columns:1fr 1fr;gap:14px;">
+          <div class="chart-card">
+            <div class="chart-title">Requests 7 ngày qua</div>
+            <div class="line-chart" id="line7days">
+              <div class="skeleton skel-card" style="height:180px"></div>
+            </div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Phân bố theo nền tảng</div>
+            <div id="platform-donut">
+              <div class="skeleton skel-card" style="height:180px"></div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card" style="margin-top:14px;">
+          <div class="chart-title">Top nền tảng</div>
+          <div id="platform-rank">
+            <div class="skel-line w-60"></div>
+            <div class="skel-line w-40"></div>
+            <div class="skel-line w-60"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SYSTEM HEALTH (v4.0) ===== -->
+      <div class="page" id="page-health">
+        <div class="topbar">
+          <button class="mobile-hamburger" onclick="toggleSidebar()" title="Menu">☰</button>
+          <div class="topbar-title">❤️ Sức khỏe hệ thống</div>
+          <div class="topbar-right">
+            <button class="theme-toggle" onclick="toggleTheme()" title="Đổi giao diện">🌓</button>
+            <button class="btn sm" onclick="loadHealth()">↻</button>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Tài nguyên máy chủ</div>
+          <div class="health-grid" id="health-grid">
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-card"></div>
+            <div class="skeleton skel-card"></div>
+          </div>
+        </div>
+        <div class="chart-card" style="margin-top:14px;">
+          <div class="chart-title">Thông tin hệ thống</div>
+          <div id="system-info" style="font-size:13px;line-height:1.9;color:var(--text2);">
+            <div class="skel-line w-60"></div>
+            <div class="skel-line w-40"></div>
+            <div class="skel-line w-60"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- ===== USERS ===== -->
       <div class="page" id="page-users">
         <div class="topbar">
@@ -1121,6 +1475,7 @@
               <option value="warned">Có cảnh cáo ⚠️</option>
             </select>
             <span class="badge blue" id="user-count-badge">—</span>
+            <button class="btn sm" onclick="exportUsersCSV()" title="Xuất CSV">📤 CSV</button>
             <button class="btn sm" onclick="loadUsers()">↻ Tải lại</button>
           </div>
         </div>
@@ -1637,7 +1992,7 @@
         : '—';
 
       t.innerHTML = data.map((u, i) => `
-    <tr>
+    <tr style="cursor:pointer;" onclick="if(event.target.tagName!=='BUTTON')openUserModal('${u.id}')" title="Click để xem chi tiết">
       <td style="color:var(--text3);font-family:var(--mono)">${i + 1}</td>
       <td><span class="user-name">@${u.username || 'unknown'}</span></td>
       <td style="font-family:var(--mono);font-size:11px;color:var(--text3)">${u.id}</td>
@@ -1646,8 +2001,8 @@
       <td>${tierBadge(u)}</td>
       <td>${warnCell(u.warnings || 0)}</td>
       <td><div style="display:flex;gap:5px">
-        <button class="btn sm vip" onclick="quickVip('${u.id}','${u.username}',${u.isVip})" title="${u.isVip ? 'Xóa VIP' : 'Cấp VIP'}">⭐</button>
-        <button class="btn sm ban" onclick="quickBan('${u.id}','${u.username}',${u.isBanned})">${u.isBanned ? 'Unban' : 'Ban'}</button>
+        <button class="btn sm vip" onclick="event.stopPropagation();quickVip('${u.id}','${u.username}',${u.isVip})" title="${u.isVip ? 'Xóa VIP' : 'Cấp VIP'}">⭐</button>
+        <button class="btn sm ban" onclick="event.stopPropagation();quickBan('${u.id}','${u.username}',${u.isBanned})">${u.isBanned ? 'Unban' : 'Ban'}</button>
       </div></td>
     </tr>`).join('');
     }
@@ -1806,12 +2161,17 @@
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
       document.getElementById('page-' + id)?.classList.add('active');
+      if (!el) el = document.querySelector('.nav-item[data-page="' + id + '"]');
       el?.classList.add('active');
       if (id === 'users') loadUsers();
       if (id === 'queue') loadQueuePage();
       if (id === 'settings') loadSettings();
       if (id === 'logs') renderLiveLogs();
       if (id === 'moderation') loadLimitsList();
+      if (id === 'analytics') loadAnalytics();
+      if (id === 'health') loadHealth();
+      // close mobile sidebar
+      document.getElementById('sidebar')?.classList.remove('mobile-open');
     }
 
     function switchTab(prefix, id, el) {
@@ -1995,11 +2355,417 @@
     }
 
     // =====================================================
+    // v4.0 THEME SYSTEM
+    // =====================================================
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      localStorage.setItem('nobita-theme', theme);
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+      toast('🎨 Đã đổi giao diện: ' + (current === 'light' ? 'Tối' : 'Sáng'), 'info');
+    }
+    (function initTheme() {
+      const saved = localStorage.getItem('nobita-theme') || 'dark';
+      applyTheme(saved);
+    })();
+
+    // =====================================================
+    // v4.0 COMMAND PALETTE (Ctrl+K)
+    // =====================================================
+    const COMMANDS = [
+      { icon: '📊', label: 'Tổng quan', action: () => gotoPage('overview') , hint: 'g o' },
+      { icon: '📈', label: 'Phân tích chuyên sâu', action: () => gotoPage('analytics'), hint: 'g a' },
+      { icon: '👥', label: 'Người dùng', action: () => gotoPage('users'), hint: 'g u' },
+      { icon: '📋', label: 'Hàng đợi', action: () => gotoPage('queue'), hint: 'g q' },
+      { icon: '📢', label: 'Broadcast', action: () => gotoPage('broadcast'), hint: 'g b' },
+      { icon: '🛡️', label: 'Kiểm duyệt', action: () => gotoPage('moderation'), hint: 'g m' },
+      { icon: '❤️', label: 'Sức khỏe hệ thống', action: () => gotoPage('health'), hint: 'g h' },
+      { icon: '⚙️', label: 'Cài đặt', action: () => gotoPage('settings'), hint: 'g s' },
+      { icon: '📝', label: 'Nhật ký hoạt động', action: () => gotoPage('logs'), hint: 'g l' },
+      { icon: '🌓', label: 'Đổi giao diện Tối / Sáng', action: toggleTheme, hint: 't' },
+      { icon: '↻', label: 'Làm mới dữ liệu', action: () => loadStats(), hint: 'r' },
+      { icon: '📤', label: 'Xuất Users CSV', action: () => exportUsersCSV() },
+      { icon: '🔧', label: 'Bật/Tắt bảo trì', action: () => toggleMaintenance() },
+      { icon: '📖', label: 'Xem trợ giúp phím tắt', action: () => showShortcuts() },
+    ];
+    let cpaletteSelected = 0;
+    function openCommandPalette() {
+      document.getElementById('cpalette-backdrop').classList.add('active');
+      const input = document.getElementById('cpalette-input');
+      input.value = ''; cpaletteSelected = 0;
+      renderCommandList('');
+      setTimeout(() => input.focus(), 20);
+    }
+    function closeCommandPalette() {
+      document.getElementById('cpalette-backdrop').classList.remove('active');
+    }
+    function renderCommandList(q) {
+      q = q.toLowerCase().trim();
+      const filtered = q ? COMMANDS.filter(c => c.label.toLowerCase().includes(q)) : COMMANDS;
+      const host = document.getElementById('cpalette-list');
+      if (!filtered.length) {
+        host.innerHTML = '<div style="padding:16px;color:var(--text3);font-size:13px;">Không tìm thấy lệnh nào.</div>';
+        return;
+      }
+      host.innerHTML = filtered.map((c, i) =>
+        `<div class="cpalette-item ${i === cpaletteSelected ? 'selected' : ''}" onclick="runCommand(${COMMANDS.indexOf(c)})">
+          <span class="cpalette-icon">${c.icon}</span>
+          <span>${c.label}</span>
+          ${c.hint ? `<span class="cpalette-hint">${c.hint}</span>` : ''}
+        </div>`
+      ).join('');
+    }
+    function runCommand(idx) {
+      const cmd = COMMANDS[idx];
+      if (!cmd) return;
+      closeCommandPalette();
+      setTimeout(() => cmd.action(), 50);
+    }
+
+    // =====================================================
+    // v4.0 KEYBOARD SHORTCUTS
+    // =====================================================
+    let keySeq = '';
+    let keySeqTimer;
+    document.addEventListener('keydown', (e) => {
+      // Ctrl+K / Cmd+K -> command palette
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        openCommandPalette();
+        return;
+      }
+      // Inside command palette
+      if (document.getElementById('cpalette-backdrop').classList.contains('active')) {
+        if (e.key === 'Escape') closeCommandPalette();
+        if (e.key === 'Enter') {
+          const items = document.querySelectorAll('.cpalette-item');
+          items[cpaletteSelected]?.click();
+        }
+        if (e.key === 'ArrowDown') { cpaletteSelected++; updateSelected(); e.preventDefault(); }
+        if (e.key === 'ArrowUp') { cpaletteSelected--; updateSelected(); e.preventDefault(); }
+        return;
+      }
+      // Ignore when typing in inputs / textareas
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === '?') { showShortcuts(); return; }
+      if (e.key === 't') { toggleTheme(); return; }
+      if (e.key === 'r') { loadStats(); toast('↻ Đang làm mới...', 'info'); return; }
+      if (e.key === 'Escape') {
+        closeCommandPalette();
+        document.getElementById('modal-backdrop')?.classList.remove('active');
+        return;
+      }
+      // Two-key sequences (g+X)
+      keySeq += e.key.toLowerCase();
+      clearTimeout(keySeqTimer);
+      keySeqTimer = setTimeout(() => keySeq = '', 900);
+      const MAP = { go:'overview', ga:'analytics', gu:'users', gq:'queue', gb:'broadcast', gm:'moderation', gh:'health', gs:'settings', gl:'logs' };
+      if (MAP[keySeq]) { gotoPage(MAP[keySeq]); keySeq = ''; }
+    });
+    function updateSelected() {
+      const items = document.querySelectorAll('.cpalette-item');
+      if (!items.length) return;
+      if (cpaletteSelected < 0) cpaletteSelected = items.length - 1;
+      if (cpaletteSelected >= items.length) cpaletteSelected = 0;
+      items.forEach((it, i) => it.classList.toggle('selected', i === cpaletteSelected));
+      items[cpaletteSelected].scrollIntoView({ block: 'nearest' });
+    }
+    function showShortcuts() {
+      openModal('⌨️ Phím tắt',
+        '<div style="line-height:1.9">' +
+        '<b>Ctrl+K</b> — Mở command palette<br>' +
+        '<b>T</b> — Đổi giao diện tối/sáng<br>' +
+        '<b>R</b> — Làm mới dữ liệu<br>' +
+        '<b>?</b> — Hiện trợ giúp này<br>' +
+        '<b>Esc</b> — Đóng modal/overlay<br><br>' +
+        '<b>Chuyển trang (g + X):</b><br>' +
+        'g&nbsp;o → Tổng quan · g&nbsp;a → Phân tích · g&nbsp;u → Users<br>' +
+        'g&nbsp;q → Queue · g&nbsp;b → Broadcast · g&nbsp;m → Moderation<br>' +
+        'g&nbsp;h → Health · g&nbsp;s → Settings · g&nbsp;l → Logs' +
+        '</div>'
+      );
+    }
+
+    // =====================================================
+    // v4.0 MODAL
+    // =====================================================
+    function openModal(title, html) {
+      document.getElementById('modal-title').innerHTML = title;
+      document.getElementById('modal-body').innerHTML = html;
+      document.getElementById('modal-backdrop').classList.add('active');
+    }
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.remove('active');
+    }
+
+    // =====================================================
+    // v4.0 REFRESH INTERVAL
+    // =====================================================
+    let refreshTimer = null;
+    function setRefreshInterval(ms) {
+      ms = parseInt(ms);
+      if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+      localStorage.setItem('nobita-refresh', ms);
+      if (ms > 0) refreshTimer = setInterval(loadStats, ms);
+      toast(ms > 0 ? `⏱️ Tự làm mới mỗi ${ms / 1000}s` : '⏸️ Đã tắt tự làm mới', 'info');
+    }
+    (function initRefresh() {
+      const saved = parseInt(localStorage.getItem('nobita-refresh')) || 10000;
+      const sel = document.getElementById('refresh-select');
+      if (sel) sel.value = saved;
+      if (saved > 0) refreshTimer = setInterval(loadStats, saved);
+    })();
+
+    // =====================================================
+    // v4.0 SIDEBAR TOGGLE (mobile hamburger)
+    // =====================================================
+    function toggleSidebar() {
+      document.getElementById('sidebar')?.classList.toggle('mobile-open');
+    }
+
+    // =====================================================
+    // v4.0 USER DETAIL MODAL
+    // =====================================================
+    async function openUserModal(userId) {
+      openModal('👤 Chi tiết người dùng', '<div class="skeleton skel-card"></div><div class="skel-line w-60"></div><div class="skel-line w-40"></div>');
+      const d = await apiFetch('/api/user/' + userId + '/details');
+      if (!d) { closeModal(); return toast('❌ Không tải được chi tiết user', 'err'); }
+      const flags = [];
+      if (d.isAdmin) flags.push('<span class="badge amber">👑 Admin</span>');
+      if (d.isVip) flags.push('<span class="badge">⭐ VIP</span>');
+      if (d.isPremium) flags.push('<span class="badge purple">💎 Premium</span>');
+      if (d.isBanned) flags.push('<span class="badge red">🚫 Banned</span>');
+      if (d.isMuted) flags.push('<span class="badge">🔇 Muted</span>');
+      const fmtDate = (ts) => ts ? new Date(ts).toLocaleString('vi-VN') : '—';
+      let html = '';
+      html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">`;
+      html += `  <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple));display:flex;align-items:center;justify-content:center;font-size:22px;color:white;">${(d.username || '?').charAt(0).toUpperCase()}</div>`;
+      html += `  <div><div style="font-size:17px;font-weight:600;">@${d.username || 'unknown'}</div><div style="font-size:12px;color:var(--text3);">ID: ${d.id}</div></div>`;
+      html += `</div>`;
+      html += `<div style="margin-bottom:10px;">${flags.join(' ') || '<span class="badge">👤 User</span>'}</div>`;
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">`;
+      html += `  <div class="health-item"><div class="health-label">Cấp bậc</div><div class="health-value" style="font-size:16px;">${d.badge} Lv.${d.level}</div></div>`;
+      html += `  <div class="health-item"><div class="health-label">Đã tải</div><div class="health-value" style="font-size:16px;">${d.count} video</div></div>`;
+      html += `  <div class="health-item"><div class="health-label">Cảnh cáo</div><div class="health-value" style="font-size:16px;color:${d.warnings>0?'var(--amber)':'var(--text)'}">${d.warnings}</div></div>`;
+      html += `  <div class="health-item"><div class="health-label">Yêu thích</div><div class="health-value" style="font-size:16px;">${d.favoritesCount}</div></div>`;
+      html += `</div>`;
+      html += `<div style="font-size:12px;color:var(--text2);line-height:1.8;">`;
+      html += `🗓️ Tham gia: ${fmtDate(d.joinedAt)}<br>`;
+      html += `⏱️ Lần cuối: ${fmtDate(d.lastUsed)}<br>`;
+      html += `🌍 Ngôn ngữ: ${(d.preferences?.lang || 'vi').toUpperCase()} · Chất lượng: ${(d.preferences?.defaultQuality || 'hd').toUpperCase()}<br>`;
+      if (d.streak) html += `🔥 Streak: ${d.streak.streak} ngày · ${d.streak.points || 0} điểm<br>`;
+      if (d.referral) html += `🎁 Mời: ${d.referral.invitedCount || 0} người<br>`;
+      html += `</div>`;
+      if (d.achievements?.length) {
+        html += `<div style="margin-top:14px;"><b>🏅 Thành tích (${d.achievements.length}):</b><br>`;
+        html += d.achievements.map(a => `<div style="margin:4px 0;font-size:12px;">${a.name} — <span style="color:var(--text3)">${a.desc}</span></div>`).join('');
+        html += `</div>`;
+      }
+      if (d.history?.length) {
+        html += `<div style="margin-top:14px;"><b>📥 Lịch sử tải gần đây:</b><br>`;
+        html += d.history.slice(0, 10).map(h => {
+          const short = (h.url || '').substring(0, 60);
+          return `<div style="margin:4px 0;font-size:11.5px;font-family:var(--mono);color:var(--text2);">${new Date(h.time).toLocaleString('vi-VN', { hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit' })} · ${h.platform || '?'} · ${short}</div>`;
+        }).join('');
+        html += `</div>`;
+      }
+      openModal('👤 Chi tiết người dùng', html);
+    }
+
+    // =====================================================
+    // v4.0 CSV EXPORT
+    // =====================================================
+    function exportUsersCSV() {
+      if (!allUsers || !allUsers.length) { toast('⚠️ Chưa có dữ liệu users', 'err'); return; }
+      const header = ['id', 'username', 'count', 'lastUsed', 'joinedAt', 'vip', 'premium', 'banned', 'warnings'];
+      const rows = allUsers.map(u => [
+        u.id,
+        (u.username || '').replace(/[",\n]/g, ' '),
+        u.count || 0,
+        u.lastUsed ? new Date(u.lastUsed).toISOString() : '',
+        u.joinedAt ? new Date(u.joinedAt).toISOString() : '',
+        u.isVip ? 1 : 0,
+        u.isPremium ? 1 : 0,
+        u.isBanned ? 1 : 0,
+        u.warnings || 0,
+      ].map(v => `"${v}"`).join(','));
+      const csv = [header.join(','), ...rows].join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nobita-users-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast(`📤 Đã xuất ${rows.length} users`, 'ok');
+    }
+
+    // =====================================================
+    // v4.0 ANALYTICS
+    // =====================================================
+    const PLATFORM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ef4444', '#06b6d4', '#ec4899', '#84cc16', '#eab308'];
+    async function loadAnalytics() {
+      const [days, plat] = await Promise.all([
+        apiFetch('/api/stats/daily7'),
+        apiFetch('/api/stats/platforms'),
+      ]);
+      if (days) renderLine7Days(days.days);
+      if (plat) { renderDonut(plat.platforms); renderPlatformRank(plat.platforms, plat.total); }
+    }
+    function renderLine7Days(days) {
+      const host = document.getElementById('line7days');
+      if (!host || !days?.length) return;
+      const w = 640, h = 180, pad = 28;
+      const max = Math.max(1, ...days.map(d => Math.max(d.requests, d.downloads)));
+      const stepX = (w - pad * 2) / (days.length - 1 || 1);
+      const yOf = v => h - pad - ((v / max) * (h - pad * 2));
+      const points = days.map((d, i) => ({ x: pad + i * stepX, y: yOf(d.requests), v: d.requests, lbl: d.label }));
+      const downloads = days.map((d, i) => ({ x: pad + i * stepX, y: yOf(d.downloads), v: d.downloads }));
+      const linePath = 'M' + points.map(p => `${p.x},${p.y}`).join(' L');
+      const dlPath = 'M' + downloads.map(p => `${p.x},${p.y}`).join(' L');
+      const areaPath = `M${points[0].x},${h - pad} L` + points.map(p => `${p.x},${p.y}`).join(' L') + ` L${points[points.length - 1].x},${h - pad} Z`;
+      let svg = `<svg class="line-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`;
+      svg += `<defs><linearGradient id="grad-blue" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>`;
+      svg += `<path class="area" d="${areaPath}"/>`;
+      svg += `<path class="stroke" d="${linePath}"/>`;
+      svg += `<path class="stroke" d="${dlPath}" style="stroke:#22c55e;stroke-dasharray:4 3"/>`;
+      points.forEach(p => { svg += `<circle cx="${p.x}" cy="${p.y}" r="3"/>`; });
+      points.forEach((p, i) => { svg += `<text x="${p.x}" y="${h - 6}" text-anchor="middle">${p.lbl}</text>`; });
+      points.forEach(p => { svg += `<text x="${p.x}" y="${p.y - 8}" text-anchor="middle" fill="${getComputedStyle(document.body).color}">${p.v}</text>`; });
+      svg += `</svg>`;
+      svg += `<div style="display:flex;gap:14px;justify-content:center;font-size:11px;color:var(--text2);margin-top:4px;">` +
+        `<span><span style="display:inline-block;width:10px;height:2px;background:#3b82f6;vertical-align:middle;margin-right:4px;"></span>Requests</span>` +
+        `<span><span style="display:inline-block;width:10px;height:2px;background:#22c55e;border-top:1px dashed #22c55e;vertical-align:middle;margin-right:4px;"></span>Downloads</span>` +
+        `</div>`;
+      host.innerHTML = svg;
+    }
+    function renderDonut(platforms) {
+      const host = document.getElementById('platform-donut');
+      if (!host) return;
+      if (!platforms?.length) {
+        host.innerHTML = '<div style="padding:20px;color:var(--text3);text-align:center;">Chưa có dữ liệu</div>';
+        return;
+      }
+      const total = platforms.reduce((s, p) => s + p.count, 0) || 1;
+      const R = 70, cx = 90, cy = 90;
+      let acc = 0;
+      const arcs = platforms.map((p, i) => {
+        const pct = p.count / total;
+        const start = acc * Math.PI * 2 - Math.PI / 2;
+        acc += pct;
+        const end = acc * Math.PI * 2 - Math.PI / 2;
+        const x1 = cx + R * Math.cos(start), y1 = cy + R * Math.sin(start);
+        const x2 = cx + R * Math.cos(end), y2 = cy + R * Math.sin(end);
+        const large = pct > 0.5 ? 1 : 0;
+        return `<path d="M${cx},${cy} L${x1},${y1} A${R},${R} 0 ${large} 1 ${x2},${y2} Z" fill="${PLATFORM_COLORS[i % PLATFORM_COLORS.length]}" />`;
+      }).join('');
+      const legend = platforms.map((p, i) =>
+        `<div><span class="sw" style="background:${PLATFORM_COLORS[i % PLATFORM_COLORS.length]}"></span>${p.emoji} ${p.name} — <b>${p.count}</b> (${p.percent}%)</div>`
+      ).join('');
+      host.innerHTML =
+        `<div class="donut-wrap">` +
+        `<svg class="donut" viewBox="0 0 180 180">${arcs}<circle cx="${cx}" cy="${cy}" r="40" fill="var(--bg2)"/>` +
+        `<text x="${cx}" y="${cy - 4}" text-anchor="middle" style="font-size:11px;fill:var(--text3);font-family:var(--mono);">Tổng</text>` +
+        `<text x="${cx}" y="${cy + 12}" text-anchor="middle" style="font-size:16px;fill:var(--text);font-weight:600;">${total}</text>` +
+        `</svg>` +
+        `<div class="donut-legend">${legend}</div>` +
+        `</div>`;
+    }
+    function renderPlatformRank(platforms, total) {
+      const host = document.getElementById('platform-rank');
+      if (!host) return;
+      if (!platforms?.length) { host.innerHTML = '<div style="color:var(--text3);">Chưa có dữ liệu</div>'; return; }
+      host.innerHTML = platforms.map((p, i) => {
+        const pct = total > 0 ? (p.count / total * 100) : 0;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;">` +
+          `<span style="width:22px;color:var(--text3);font-family:var(--mono);">#${i + 1}</span>` +
+          `<span style="min-width:120px;">${p.emoji} ${p.name}</span>` +
+          `<div style="flex:1;background:var(--bg3);height:6px;border-radius:3px;overflow:hidden;"><span style="display:block;height:100%;width:${pct.toFixed(1)}%;background:${PLATFORM_COLORS[i % PLATFORM_COLORS.length]};"></span></div>` +
+          `<span style="min-width:80px;text-align:right;font-family:var(--mono);font-size:12px;">${p.count} · ${p.percent}%</span>` +
+          `</div>`;
+      }).join('');
+    }
+
+    // =====================================================
+    // v4.0 SYSTEM HEALTH
+    // =====================================================
+    async function loadHealth() {
+      const h = await apiFetch('/api/system/health');
+      if (!h) return;
+      const grid = document.getElementById('health-grid');
+      grid.innerHTML =
+        `<div class="health-item"><div class="health-label">Bộ nhớ</div><div class="health-value">${h.usedMemoryPct}%</div><div class="health-bar"><span style="width:${h.usedMemoryPct}%"></span></div></div>` +
+        `<div class="health-item"><div class="health-label">Heap Node</div><div class="health-value">${h.heapUsedMB} MB</div><div style="font-size:11px;color:var(--text3);">/ ${h.heapTotalMB} MB</div></div>` +
+        `<div class="health-item"><div class="health-label">Load 1m</div><div class="health-value">${h.loadAvg1m.toFixed(2)}</div><div style="font-size:11px;color:var(--text3);">CPU: ${h.cpuCount} lõi</div></div>` +
+        `<div class="health-item"><div class="health-label">Uptime</div><div class="health-value">${formatUptimeShort(h.uptime)}</div></div>`;
+      const info = document.getElementById('system-info');
+      info.innerHTML =
+        `🖥️ Host: <b>${h.hostname}</b><br>` +
+        `💻 Nền tảng: <b>${h.platform} / ${h.arch}</b><br>` +
+        `🟢 Node: <b>${h.nodeVersion}</b><br>` +
+        `🧠 CPU: <b>${h.cpuModel}</b> × ${h.cpuCount}<br>` +
+        `💾 RAM: <b>${h.totalMemoryMB} MB</b> (còn trống ${h.freeMemoryMB} MB)<br>` +
+        `📦 RSS Node: <b>${h.rssMB} MB</b><br>` +
+        `🔢 Bot: <b>v${h.version} ${h.edition || ''}</b>`;
+    }
+    function formatUptimeShort(s) {
+      s = Math.floor(s);
+      const d = Math.floor(s / 86400); s %= 86400;
+      const h = Math.floor(s / 3600); s %= 3600;
+      const m = Math.floor(s / 60);
+      if (d) return `${d}d ${h}h`;
+      if (h) return `${h}h ${m}m`;
+      return `${m}m`;
+    }
+
+    // =====================================================
     // INIT + AUTO REFRESH
     // =====================================================
     loadStats();
     setInterval(pollLiveLogs, 5000);
-    setInterval(loadStats, 30000); // refresh đầy đủ mỗi 30s
+    // Note: main auto-refresh is now controlled by setRefreshInterval / initRefresh above
+  </script>
+
+  <!-- ============ v4.0 OVERLAYS ============ -->
+  <div class="cpalette-backdrop" id="cpalette-backdrop" onclick="if(event.target===this)closeCommandPalette()">
+    <div class="cpalette" onclick="event.stopPropagation()">
+      <input id="cpalette-input" type="text" placeholder="Nhập lệnh hoặc tên trang..." oninput="renderCommandList(this.value)">
+      <div class="cpalette-list" id="cpalette-list"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="modal-backdrop" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-title">—</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body">—</div>
+    </div>
+  </div>
+
+  <div class="fab-menu" id="fab-menu">
+    <button onclick="gotoPage('broadcast');toggleFab();">📢 Mở Broadcast nhanh</button>
+    <button onclick="toggleMaintenance();toggleFab();">🔧 Bật/Tắt bảo trì</button>
+    <button onclick="exportUsersCSV();toggleFab();">📤 Xuất Users CSV</button>
+    <button onclick="showShortcuts();toggleFab();">⌨️ Phím tắt</button>
+  </div>
+  <button class="fab" id="fab" onclick="toggleFab()" title="Hành động nhanh">＋</button>
+
+  <script>
+    function toggleFab() {
+      document.getElementById('fab-menu').classList.toggle('active');
+    }
+    async function toggleMaintenance() {
+      const isOn = document.getElementById('maint-badge').textContent.includes('Bảo trì');
+      const r = await apiFetch('/api/admin/maintenance', { method: 'POST', body: { status: isOn ? 'off' : 'on' } });
+      if (r) { toast(isOn ? '✅ Đã tắt bảo trì' : '🔧 Đã bật bảo trì', 'ok'); loadStats(); }
+    }
   </script>
 </body>
 
