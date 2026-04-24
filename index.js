@@ -25,7 +25,7 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5');
 const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
 const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
 const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
-const BOT_VERSION = '4.0';
+const BOT_VERSION = '4.1';
 const BOT_EDITION = 'Ultra Edition';
 const BOT_START_TIME = Date.now();
 
@@ -85,6 +85,15 @@ let daily7Stats = [];
 // Cache of pending "smart reply" actions keyed by short id (HD/SD/MP3/retry/fav)
 let actionCache = new Map();
 
+// v4.1: scheduled broadcasts: [{ id, at (ms epoch), text, createdBy, createdAt, sent? }]
+let scheduledBroadcasts = [];
+// v4.1: weekly leaderboard: userId -> { weekStart (ms), count, username }
+let weeklyTopStats = new Map();
+// v4.1: downloads-per-hour heatmap: 7 weekdays × 24 hours (Sun..Sat)
+let heatmapStats = Array.from({ length: 7 }, () => new Array(24).fill(0));
+// v4.1: SSE clients listening to live log stream
+const sseClients = new Set();
+
 const DEFAULT_USER_PREFS = {
     lang: 'vi',
     defaultQuality: 'hd',    // hd | sd | mp3
@@ -111,8 +120,31 @@ const activityLogs = [];
 
 function addActivityLog(type, text) {
     const time = new Date().toLocaleTimeString('vi-VN');
-    activityLogs.unshift({ type, text, time });
+    const entry = { type, text, time, ts: Date.now() };
+    activityLogs.unshift(entry);
     if (activityLogs.length > 50) activityLogs.pop();
+    // v4.1: push to SSE clients
+    const payload = `data: ${JSON.stringify(entry)}\n\n`;
+    for (const res of sseClients) { try { res.write(payload); } catch (_) {} }
+}
+
+// v4.1: bump heatmap bucket (called on each download)
+function bumpHeatmap() {
+    const d = new Date();
+    heatmapStats[d.getDay()][d.getHours()]++;
+}
+
+// v4.1: bump weekly top (bucket resets every Monday 00:00)
+function bumpWeeklyTop(userId, username) {
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const monday = new Date(now); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - (day - 1));
+    const weekStart = monday.getTime();
+    let cur = weeklyTopStats.get(userId);
+    if (!cur || cur.weekStart !== weekStart) cur = { weekStart, count: 0, username };
+    cur.count++;
+    cur.username = username || cur.username;
+    weeklyTopStats.set(userId, cur);
 }
 
 // ============================================================
@@ -145,6 +177,9 @@ function loadData() {
             if (data.referralData) referralData = new Map(data.referralData);
             if (data.platformStats) platformStats = data.platformStats;
             if (data.daily7Stats) daily7Stats = data.daily7Stats;
+            if (data.scheduledBroadcasts) scheduledBroadcasts = data.scheduledBroadcasts;
+            if (data.weeklyTopStats) weeklyTopStats = new Map(data.weeklyTopStats);
+            if (Array.isArray(data.heatmapStats) && data.heatmapStats.length === 7) heatmapStats = data.heatmapStats;
             console.log('✅ Data loaded successfully.');
         }
     } catch (e) {
@@ -177,7 +212,10 @@ function saveData() {
             dailyStreaks: Array.from(dailyStreaks.entries()),
             referralData: Array.from(referralData.entries()),
             platformStats,
-            daily7Stats
+            daily7Stats,
+            scheduledBroadcasts,
+            weeklyTopStats: Array.from(weeklyTopStats.entries()),
+            heatmapStats,
         }, null, 2));
     } catch (e) {
         console.error('❌ Error saving data:', e.message);
@@ -499,6 +537,93 @@ app.get('/api/user/:id/details', requireAdminToken, (req, res) => {
         streak: streak,
         referral: ref,
     });
+});
+
+// v4.1: Leaderboard (global + weekly)
+app.get('/api/stats/leaderboard', requireAdminToken, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const global = Array.from(stats.activeUsers.entries())
+        .map(([id, u]) => ({
+            id: Number(id),
+            username: u.username,
+            count: u.count || 0,
+            level: getUserLevel(u.count || 0),
+            badge: getLevelBadge(getUserLevel(u.count || 0)),
+        }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit);
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const monday = new Date(now); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - (day - 1));
+    const weekStart = monday.getTime();
+    const weekly = Array.from(weeklyTopStats.entries())
+        .filter(([, v]) => v.weekStart === weekStart)
+        .map(([id, v]) => ({ id: Number(id), username: v.username, count: v.count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit);
+    res.json({ weekStart, global, weekly });
+});
+
+// v4.1: Downloads heatmap (7 days × 24 hours)
+app.get('/api/stats/heatmap', requireAdminToken, (req, res) => {
+    const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    const rows = heatmapStats.map((hours, d) => ({
+        day: days[d],
+        hours,
+        total: hours.reduce((s, n) => s + n, 0),
+    }));
+    let peak = { day: '—', hour: 0, count: 0 };
+    heatmapStats.forEach((hours, d) => {
+        hours.forEach((n, h) => { if (n > peak.count) peak = { day: days[d], hour: h, count: n }; });
+    });
+    res.json({ rows, peak });
+});
+
+// v4.1: SSE live log stream
+app.get('/api/logs/stream', (req, res) => {
+    if (!process.env.DASHBOARD_TOKEN || req.query.token !== process.env.DASHBOARD_TOKEN) return res.status(401).end();
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 5000\n\n');
+    // Send recent logs on connect (newest first then reverse for chronological UI)
+    for (const entry of [...activityLogs].reverse().slice(-20)) {
+        res.write(`data: ${JSON.stringify(entry)}\n\n`);
+    }
+    const ka = setInterval(() => { try { res.write(':\n\n'); } catch (_) {} }, 20000);
+    sseClients.add(res);
+    req.on('close', () => { sseClients.delete(res); clearInterval(ka); });
+});
+
+// v4.1: Scheduled broadcasts CRUD
+app.get('/api/broadcast/scheduled', requireAdminToken, (req, res) => {
+    res.json(scheduledBroadcasts.slice(-50).sort((a, b) => a.at - b.at));
+});
+app.post('/api/broadcast/schedule', requireAdminToken, (req, res) => {
+    const { at, text } = req.body || {};
+    const atMs = typeof at === 'number' ? at : Date.parse(at);
+    if (!atMs || isNaN(atMs)) return res.status(400).json({ error: 'invalid at' });
+    if (!text || String(text).trim().length === 0) return res.status(400).json({ error: 'empty text' });
+    if (atMs < Date.now()) return res.status(400).json({ error: 'in past' });
+    const job = { id: String(Date.now()), at: atMs, text, createdBy: 'dashboard', createdAt: Date.now(), sent: false };
+    scheduledBroadcasts.push(job); saveData();
+    res.json({ success: true, job });
+});
+app.delete('/api/broadcast/schedule/:id', requireAdminToken, (req, res) => {
+    const idx = scheduledBroadcasts.findIndex(j => j.id === req.params.id && !j.sent);
+    if (idx === -1) return res.status(404).json({ error: 'not found' });
+    scheduledBroadcasts.splice(idx, 1); saveData();
+    res.json({ success: true });
+});
+
+// v4.1: Public emit endpoint so bot internal events push to dashboard bell
+app.post('/api/events/broadcast', requireAdminToken, (req, res) => {
+    const { type = 'info', text = '' } = req.body || {};
+    addActivityLog(type, text);
+    res.json({ success: true });
 });
 
 app.get('/api/users', requireAdminToken, (req, res) => {
@@ -998,7 +1123,19 @@ bot.onText(/^\/help$/, async (msg) => {
     text += `• /level — Cấp bậc & kinh nghiệm\n`;
     text += `• /invite — Lấy link mời bạn bè\n\n`;
 
-    text += `💡 Gửi link video bất kỳ để tải (không watermark). Bot cũng tự động xử lý khi bạn gửi nhiều link trong một tin nhắn (batch mode).\n\n`;
+    text += `✨ *Tính năng v4.1 (mới):*\n`;
+    text += `• /topweek — BXH tuần\n`;
+    text += `• /translate <mã> <text> — Dịch văn bản (vi/en/ja/ko...)\n`;
+    text += `• /weather <thành phố> — Thời tiết trực tiếp\n`;
+    text += `• /short <url> — Rút gọn link\n`;
+    text += `• /expand <url> — Mở full link rút gọn\n`;
+    text += `• /thumb <url> — Lấy ảnh thumbnail video\n`;
+    text += `• /export — Xuất dữ liệu cá nhân (JSON)\n`;
+    text += `• /joke — Chuyện cười ngẫu nhiên\n`;
+    text += `• /quote — Câu nói truyền cảm hứng\n\n`;
+
+    text += `💡 Gửi link video bất kỳ để tải (không watermark). Bot cũng tự động xử lý khi bạn gửi nhiều link trong một tin nhắn (batch mode).\n`;
+    text += `⚡ Inline mode: gõ \`@${(await bot.getMe().catch(() => ({}))).username || 'bot'} <url>\` trong mọi cuộc chat.\n\n`;
 
     // Lệnh chỉ Admin thấy
     if (isAdminUser) {
@@ -1031,6 +1168,12 @@ bot.onText(/^\/help$/, async (msg) => {
         text += `• /caption <text> — Đổi caption\n`;
         text += `• /setmaxsize <MB> — Giới hạn file size\n`;
         text += `• /maintenance on/off — Bật/Tắt bảo trì\n`;
+        text += `• /schedule YYYY-MM-DD HH:MM <text> — Hẹn giờ broadcast\n`;
+        text += `• /scheduled — Xem broadcast đang chờ\n`;
+        text += `• /unschedule <id> — Hủy broadcast đã hẹn\n`;
+        text += `• /search <từ khóa> — Tìm user/history nhanh\n`;
+        text += `• /cleanup — Dọn user 60 ngày không hoạt động\n`;
+        text += `• /sysinfo — Thông tin hệ thống chi tiết\n`;
     }
 
     await bot.sendMessage(chatId, text, {
@@ -1436,12 +1579,226 @@ bot.onText(/^\/invite$/, async (msg) => {
 });
 
 // ============================================================
+// ✨ v4.1 EXTRA UTILITIES — translate / weather / short / thumb / etc.
+// ============================================================
+
+// /translate <target> <text>   (free LibreTranslate mirror)
+bot.onText(/^\/translate(?:\s+(\w{2}))?\s+([\s\S]+)/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const targetArg = (match[1] || 'en').toLowerCase();
+    const text = (match[2] || '').trim();
+    if (!text) return bot.sendMessage(chatId, 'ℹ️ Cú pháp: `/translate <mã_ngôn_ngữ> <nội dung>`\nVí dụ: `/translate en Xin chào`', { parse_mode: 'Markdown' });
+    const notify = await bot.sendMessage(chatId, '🌐 Đang dịch...');
+    const endpoints = [
+        'https://translate.astian.org/translate',
+        'https://libretranslate.de/translate',
+        'https://translate.terraprint.co/translate',
+    ];
+    let result = null;
+    for (const ep of endpoints) {
+        try {
+            const res = await axios.post(ep, { q: text, source: 'auto', target: targetArg, format: 'text' }, { timeout: 10000 });
+            if (res.data?.translatedText) { result = res.data.translatedText; break; }
+        } catch (_) {}
+    }
+    if (!result) return bot.editMessageText('❌ Dịch vụ dịch tạm không phản hồi. Thử lại sau.', { chat_id: chatId, message_id: notify.message_id });
+    bot.editMessageText(`🌐 *Dịch sang ${targetArg.toUpperCase()}*\n\n${result}`, {
+        chat_id: chatId, message_id: notify.message_id, parse_mode: 'Markdown'
+    });
+});
+
+// /weather <city>   (wttr.in, no API key)
+bot.onText(/^\/weather\s+(.+)/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const city = match[1].trim();
+    const notify = await bot.sendMessage(chatId, `🌤️ Đang lấy thời tiết *${city}*...`, { parse_mode: 'Markdown' });
+    try {
+        const { data } = await axios.get(`https://wttr.in/${encodeURIComponent(city)}`, {
+            params: { format: 'j1' }, timeout: 10000, headers: { 'User-Agent': 'curl/7.0' }
+        });
+        const cur = data?.current_condition?.[0];
+        const area = data?.nearest_area?.[0]?.areaName?.[0]?.value || city;
+        if (!cur) throw new Error('no data');
+        const txt =
+            `🌤️ *Thời tiết ${area}*\n\n` +
+            `🌡️ Nhiệt độ: *${cur.temp_C}°C* (cảm giác ${cur.FeelsLikeC}°C)\n` +
+            `💧 Độ ẩm: ${cur.humidity}%\n` +
+            `💨 Gió: ${cur.windspeedKmph} km/h ${cur.winddir16Point}\n` +
+            `☁️ Trạng thái: ${cur.lang_vi?.[0]?.value || cur.weatherDesc?.[0]?.value}\n` +
+            `👁️ Tầm nhìn: ${cur.visibility} km\n` +
+            `🕒 Cập nhật: ${cur.localObsDateTime || '—'}`;
+        bot.editMessageText(txt, { chat_id: chatId, message_id: notify.message_id, parse_mode: 'Markdown' });
+    } catch (e) {
+        bot.editMessageText(`❌ Không lấy được thời tiết cho "${city}".`, { chat_id: chatId, message_id: notify.message_id });
+    }
+});
+
+// /short <url>   (is.gd, no API key)
+bot.onText(/^\/short\s+(\S+)/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1];
+    try {
+        const { data } = await axios.get('https://is.gd/create.php', {
+            params: { format: 'simple', url }, timeout: 10000
+        });
+        if (typeof data === 'string' && data.startsWith('http')) {
+            bot.sendMessage(chatId, `🔗 *Link rút gọn:*\n\`${data.trim()}\``, { parse_mode: 'Markdown' });
+        } else throw new Error('bad');
+    } catch { bot.sendMessage(chatId, '❌ Không rút gọn được. Kiểm tra lại URL.'); }
+});
+
+// /expand <short_url>   (follow redirects)
+bot.onText(/^\/expand\s+(\S+)/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1];
+    try {
+        const res = await axios.get(url, { maxRedirects: 10, timeout: 10000, validateStatus: () => true });
+        const final = res.request?.res?.responseUrl || res.config?.url || url;
+        bot.sendMessage(chatId, `🔓 *Link đầy đủ:*\n\`${final}\``, { parse_mode: 'Markdown' });
+    } catch { bot.sendMessage(chatId, '❌ Không expand được URL.'); }
+});
+
+// /thumb <url>   (extract thumbnail for tiktok via tikwm)
+bot.onText(/^\/thumb\s+(\S+)/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1];
+    const platform = detectPlatform(url);
+    const notify = await bot.sendMessage(chatId, '🖼️ Đang lấy ảnh thumbnail...');
+    try {
+        if (platform?.platform === 'tiktok' || platform?.platform === 'douyin') {
+            const { data } = await axios.post('https://www.tikwm.com/api/', { url, hd: 1 }, { timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } });
+            const cover = data?.data?.cover || data?.data?.origin_cover;
+            if (!cover) throw new Error('no cover');
+            await bot.deleteMessage(chatId, notify.message_id).catch(() => {});
+            return bot.sendPhoto(chatId, cover, { caption: `🖼️ Thumbnail từ ${platform.platform}\n\n${data.data.title || ''}` });
+        }
+        // fallback: try to fetch og:image meta
+        const html = (await axios.get(url, { timeout: 10000, headers: { 'User-Agent': 'Mozilla/5.0' } })).data;
+        const m = String(html).match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
+        if (!m) throw new Error('no og:image');
+        await bot.deleteMessage(chatId, notify.message_id).catch(() => {});
+        bot.sendPhoto(chatId, m[1], { caption: `🖼️ Thumbnail\n${url}` });
+    } catch { bot.editMessageText('❌ Không lấy được thumbnail.', { chat_id: chatId, message_id: notify.message_id }); }
+});
+
+// /export  — gửi JSON data cá nhân
+bot.onText(/^\/export$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id;
+    const u = stats.activeUsers.get(userId);
+    const profile = {
+        id: userId,
+        username: msg.from?.username,
+        exportedAt: new Date().toISOString(),
+        profile: u ? {
+            count: u.count, joinedAt: u.joinedAt, lastUsed: u.lastUsed,
+            history: u.history || [], platformsUsed: u.platformsUsed || [], warnings: u.warnings || 0,
+        } : null,
+        preferences: getUserPrefs(userId),
+        favorites: userFavorites.get(userId) || [],
+        dailyStreak: dailyStreaks.get(userId) || null,
+        referral: referralData.get(userId) || null,
+        achievements: getUserAchievements(userId).map(a => ({ id: a.id, name: a.name })),
+        level: u ? { level: getUserLevel(u.count), next: getNextLevelTarget(u.count) } : null,
+    };
+    const buf = Buffer.from(JSON.stringify(profile, null, 2), 'utf8');
+    const fname = `nobita-export-${userId}-${Date.now()}.json`;
+    await bot.sendDocument(chatId, buf, { caption: '📦 Dữ liệu cá nhân của bạn trên Nobita Bot.' }, { filename: fname, contentType: 'application/json' });
+});
+
+// /joke  (free jokes API)
+bot.onText(/^\/joke$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    try {
+        const { data } = await axios.get('https://official-joke-api.appspot.com/random_joke', { timeout: 8000 });
+        bot.sendMessage(chatId, `😂 *${data.setup}*\n\n_${data.punchline}_`, { parse_mode: 'Markdown' });
+    } catch { bot.sendMessage(chatId, '😅 Hôm nay hết chuyện cười rồi, thử lại sau nhé!'); }
+});
+
+// /quote  (free quotes API — Zen Quotes)
+bot.onText(/^\/quote$/i, async (msg) => {
+    const chatId = msg.chat.id;
+    try {
+        const { data } = await axios.get('https://zenquotes.io/api/random', { timeout: 8000 });
+        const q = data?.[0];
+        if (!q?.q) throw new Error('no');
+        bot.sendMessage(chatId, `💭 _"${q.q}"_\n\n— *${q.a}*`, { parse_mode: 'Markdown' });
+    } catch { bot.sendMessage(chatId, '💡 "Cố lên! Thử lại sau nhé." — Nobita Bot'); }
+});
+
+// /topweek  (top của tuần này)
+bot.onText(/^\/topweek$/i, (msg) => {
+    const chatId = msg.chat.id;
+    if (weeklyTopStats.size === 0) return bot.sendMessage(chatId, '📭 Tuần này chưa có dữ liệu.');
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const monday = new Date(now); monday.setHours(0, 0, 0, 0); monday.setDate(monday.getDate() - (day - 1));
+    const weekStart = monday.getTime();
+    const rows = Array.from(weeklyTopStats.entries())
+        .filter(([, v]) => v.weekStart === weekStart)
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, 10);
+    if (!rows.length) return bot.sendMessage(chatId, '📭 Tuần này chưa có dữ liệu.');
+    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+    let out = `🏆 *Top tuần này* (từ ${monday.toLocaleDateString('vi-VN')})\n\n`;
+    rows.forEach(([id, v], i) => { out += `${medals[i]} @${v.username || id} — *${v.count}* video\n`; });
+    bot.sendMessage(chatId, out, { parse_mode: 'Markdown' });
+});
+
+// ============================================================
+// ⚡ v4.1 INLINE MODE — @botname <url>
+// ============================================================
+bot.on('inline_query', async (q) => {
+    try {
+        const query = (q.query || '').trim();
+        if (!query) {
+            return bot.answerInlineQuery(q.id, [{
+                type: 'article', id: 'help',
+                title: '📎 Dán link video vào đây...',
+                description: 'Hỗ trợ TikTok, Facebook, YouTube, Instagram, X/Twitter, Pinterest, Reddit, Bilibili',
+                input_message_content: { message_text: 'Nhập link video sau @' + (await bot.getMe()).username + ' để tải nhanh.' },
+            }], { cache_time: 5 });
+        }
+        const det = detectAllPlatforms(query).slice(0, 5);
+        if (!det.length) {
+            return bot.answerInlineQuery(q.id, [{
+                type: 'article', id: 'nourl',
+                title: '❌ Không tìm thấy link hợp lệ',
+                description: 'Vui lòng dán URL video được hỗ trợ',
+                input_message_content: { message_text: '❌ Link không hợp lệ: ' + query },
+            }], { cache_time: 5 });
+        }
+        const results = [];
+        for (const d of det) {
+            const pInfo = PLATFORMS[d.platform];
+            results.push({
+                type: 'article',
+                id: 'r_' + d.platform + '_' + results.length,
+                title: `${pInfo?.emoji || '🎬'} Tải ${pInfo?.name || d.platform}`,
+                description: d.match.substring(0, 64),
+                input_message_content: {
+                    message_text: `🎬 *${pInfo?.name || d.platform}*\n\n${d.match}\n\n⬇️ Gửi link này trực tiếp cho @${(await bot.getMe()).username} để tải.`,
+                    parse_mode: 'Markdown',
+                },
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '⬇️ Mở bot để tải', url: `https://t.me/${(await bot.getMe()).username}?start=` },
+                    ]],
+                },
+            });
+        }
+        bot.answerInlineQuery(q.id, results, { cache_time: 5 });
+    } catch (e) { /* swallow */ }
+});
+
+// ============================================================
 // 👑 ADMIN COMMANDS
 // ============================================================
 const ADMIN_CMDS = ['stats', 'users', 'broadcast', 'ban', 'unban', 'queue', 'addvip', 'removevip',
     'vips', 'panel', 'setlimit', 'resetlimit', 'limits', 'maintenance', 'warn', 'clearwarn',
     'slowmode', 'clearslowmode', 'premium', 'removepremium', 'premiums', 'caption',
-    'setmaxsize', 'botinfo', 'clearqueue', 'kickqueue', 'announce'];
+    'setmaxsize', 'botinfo', 'clearqueue', 'kickqueue', 'announce',
+    'schedule', 'scheduled', 'unschedule', 'search', 'cleanup', 'sysinfo'];
 
 bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
     const chatId = msg.chat.id;
@@ -1745,8 +2102,110 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
             bot.sendMessage(chatId, `🗑️ Đã xóa ${cleared} request khỏi hàng đợi.`);
             break;
         }
+
+        // ===== v4.1 admin commands =====
+        case 'schedule': {
+            // /schedule <YYYY-MM-DD HH:MM> <text>
+            const m = args.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}):(\d{2})\s+([\s\S]+)/);
+            if (!m) { bot.sendMessage(chatId, 'ℹ️ Cú pháp:\n`/schedule 2026-05-01 08:00 Nội dung`', { parse_mode: 'Markdown' }); break; }
+            const [_, date, hh, mm, text] = m;
+            const at = new Date(`${date}T${hh.padStart(2,'0')}:${mm}:00`).getTime();
+            if (isNaN(at) || at < Date.now()) { bot.sendMessage(chatId, '❌ Thời điểm không hợp lệ hoặc đã qua.'); break; }
+            const job = { id: String(Date.now()), at, text, createdBy: userId, createdAt: Date.now(), sent: false };
+            scheduledBroadcasts.push(job); saveData();
+            bot.sendMessage(chatId, `✅ Đã lên lịch broadcast *#${job.id}* vào ${new Date(at).toLocaleString('vi-VN')}.`, { parse_mode: 'Markdown' });
+            break;
+        }
+
+        case 'scheduled': {
+            const pending = scheduledBroadcasts.filter(j => !j.sent).sort((a, b) => a.at - b.at);
+            if (!pending.length) { bot.sendMessage(chatId, '📭 Không có broadcast nào được lên lịch.'); break; }
+            const text = pending.slice(0, 15).map(j =>
+                `• *#${j.id}* — ${new Date(j.at).toLocaleString('vi-VN')}\n  _${j.text.substring(0, 80)}${j.text.length > 80 ? '…' : ''}_`
+            ).join('\n\n');
+            bot.sendMessage(chatId, `📅 *Broadcast đang chờ:*\n\n${text}`, { parse_mode: 'Markdown' });
+            break;
+        }
+
+        case 'unschedule': {
+            if (!args) { bot.sendMessage(chatId, 'ℹ️ Cú pháp: `/unschedule <id>`', { parse_mode: 'Markdown' }); break; }
+            const idx = scheduledBroadcasts.findIndex(j => j.id === args && !j.sent);
+            if (idx === -1) { bot.sendMessage(chatId, '❌ Không tìm thấy id này.'); break; }
+            scheduledBroadcasts.splice(idx, 1); saveData();
+            bot.sendMessage(chatId, `🗑️ Đã hủy broadcast #${args}.`);
+            break;
+        }
+
+        case 'search': {
+            if (!args) { bot.sendMessage(chatId, 'ℹ️ Cú pháp: `/search <từ khóa>` (tìm trong username/id/history)', { parse_mode: 'Markdown' }); break; }
+            const q = args.toLowerCase();
+            const matches = [];
+            for (const [id, u] of stats.activeUsers.entries()) {
+                const hay = `${id} ${u.username || ''}`.toLowerCase();
+                const histMatch = (u.history || []).some(h => (h.url || '').toLowerCase().includes(q) || (h.platform || '').toLowerCase().includes(q));
+                if (hay.includes(q) || histMatch) matches.push({ id, username: u.username, count: u.count });
+                if (matches.length >= 25) break;
+            }
+            if (!matches.length) { bot.sendMessage(chatId, '📭 Không tìm thấy.'); break; }
+            const text = matches.map(m => `• \`${m.id}\` @${m.username || '—'} — ${m.count}`).join('\n');
+            bot.sendMessage(chatId, `🔎 *${matches.length} kết quả:*\n\n${text}`, { parse_mode: 'Markdown' });
+            break;
+        }
+
+        case 'cleanup': {
+            // Remove users inactive >60 days and count=0
+            const cutoff = Date.now() - 60 * 86400 * 1000;
+            let removed = 0;
+            for (const [id, u] of Array.from(stats.activeUsers.entries())) {
+                if ((u.count || 0) === 0 && (u.lastUsed || 0) < cutoff) {
+                    stats.activeUsers.delete(id); removed++;
+                }
+            }
+            saveData();
+            bot.sendMessage(chatId, `🧹 Đã dọn ${removed} user không hoạt động >60 ngày.`);
+            break;
+        }
+
+        case 'sysinfo': {
+            const os = require('os');
+            const mem = process.memoryUsage();
+            const used = os.totalmem() - os.freemem();
+            bot.sendMessage(chatId,
+                `🖥️ *Hệ thống*\n\n` +
+                `• Host: \`${os.hostname()}\` (${os.platform()}/${os.arch()})\n` +
+                `• Node: ${process.version}\n` +
+                `• CPU: ${os.cpus()[0].model} × ${os.cpus().length}\n` +
+                `• Load: ${os.loadavg().map(n => n.toFixed(2)).join(' · ')}\n` +
+                `• RAM: ${Math.round(used / 1048576)}MB / ${Math.round(os.totalmem() / 1048576)}MB\n` +
+                `• Heap: ${Math.round(mem.heapUsed / 1048576)}MB / ${Math.round(mem.heapTotal / 1048576)}MB\n` +
+                `• RSS: ${Math.round(mem.rss / 1048576)}MB\n` +
+                `• Uptime: ${formatUptime(process.uptime() * 1000)}\n` +
+                `• Bot: v${BOT_VERSION} ${BOT_EDITION}`,
+                { parse_mode: 'Markdown' });
+            break;
+        }
     }
 });
+
+// ============================================================
+// 🕒 v4.1 SCHEDULED BROADCAST EXECUTOR — tick every 30s
+// ============================================================
+setInterval(async () => {
+    const now = Date.now();
+    for (const job of scheduledBroadcasts) {
+        if (job.sent || job.at > now) continue;
+        job.sent = true; job.sentAt = now;
+        const targets = Array.from(stats.activeUsers.keys());
+        let success = 0, failed = 0;
+        for (const id of targets) {
+            try { await bot.sendMessage(id, `📢 ${job.text}`, { parse_mode: 'Markdown' }); success++; }
+            catch { failed++; }
+            await new Promise(r => setTimeout(r, 50));
+        }
+        addActivityLog('broadcast', `📅 Scheduled #${job.id}: ${success}/${targets.length} delivered`);
+        saveData();
+    }
+}, 30 * 1000);
 
 // ============================================================
 // 🎵 CALLBACK HANDLER (MP3 + v4.0 inline actions)
@@ -2103,6 +2562,8 @@ async function processQueue() {
         stats.successfulDownloads++;
         dailyStats.downloads++;
         bumpDailyDownloads();
+        bumpHeatmap();
+        bumpWeeklyTop(request.userId, stats.activeUsers.get(request.userId)?.username);
         recordHistory(request.userId, request.url, request.platform, videoData?.title);
         saveData();
         console.log(`[✅] ${request.platform} video sent to @${request.username}`);
