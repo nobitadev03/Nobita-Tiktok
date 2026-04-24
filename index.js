@@ -2523,9 +2523,30 @@ async function processQueue() {
         } else {
             const tempFile = path.join(__dirname, `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
             const writer = fs.createWriteStream(tempFile);
+            // Platform-appropriate download headers. Douyin CDN will 403 without iOS UA + Douyin Referer;
+            // likewise each platform may have its own anti-hotlink guard. Downloaders may also supply
+            // their own explicit `downloadHeaders` to override the defaults.
+            const DL_HEADERS_BY_PLATFORM = {
+                douyin:     { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1', 'Referer': 'https://www.douyin.com/' },
+                tiktok:     { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.tiktok.com/' },
+                facebook:   { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.facebook.com/' },
+                youtube:    { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.youtube.com/' },
+                instagram:  { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.instagram.com/' },
+                twitter:    { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://twitter.com/' },
+                pinterest:  { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.pinterest.com/' },
+                snapchat:   { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.snapchat.com/' },
+                reddit:     { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.reddit.com/' },
+                bilibili:   { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.bilibili.com/' },
+                threads:    { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.threads.net/' },
+                vimeo:      { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://vimeo.com/' },
+                dailymotion:{ 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://www.dailymotion.com/' },
+                likee:      { 'User-Agent': 'Mozilla/5.0',                                                                                          'Referer': 'https://likee.video/' },
+            };
+            const dlHeaders = videoData.downloadHeaders
+                || DL_HEADERS_BY_PLATFORM[request.platform]
+                || { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tiktok.com/' };
             const res = await axios.get(videoData.url, {
-                responseType: 'stream', timeout: 120000,
-                headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tiktok.com/' }
+                responseType: 'stream', timeout: 120000, maxRedirects: 10, headers: dlHeaders
             });
             res.data.pipe(writer);
             await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
@@ -3055,7 +3076,12 @@ async function downloadDouyinVideo(url) {
             const scraped = await scrapeIesdouyinShare(awemeId);
             if (!scraped?.playUrl) throw new Error('iesdouyin scrape: no play URL');
             const sizeInfo = await checkVideoSize(scraped.playUrl);
-            return { url: scraped.playUrl, title: scraped.title, ...sizeInfo };
+            return {
+                url: scraped.playUrl,
+                title: scraped.title,
+                downloadHeaders: { 'User-Agent': DOUYIN_UA_IOS, 'Referer': 'https://www.douyin.com/' },
+                ...sizeInfo
+            };
         },
         // 2) TikWM (sometimes supports Douyin URLs)
         async () => {
