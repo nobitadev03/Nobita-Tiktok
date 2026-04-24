@@ -25,7 +25,7 @@ const MAX_CONCURRENT = parseInt(process.env.MAX_CONCURRENT_REQUESTS || '5');
 const BOT_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_URL || 'http://localhost:3000';
 const DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN || 'nobita_admin';
 const DASHBOARD_URL = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
-const BOT_VERSION = '4.2';
+const BOT_VERSION = '4.3';
 const BOT_EDITION = 'Ultra Edition';
 const BOT_START_TIME = Date.now();
 
@@ -2950,72 +2950,155 @@ async function downloadBilibiliVideo(url) {
 }
 
 // ============================================================
-// 🎶 DOUYIN — v4.2 dedicated downloader
+// 🎶 DOUYIN — v4.3 dedicated downloader (iesdouyin HTML scrape primary)
 // ============================================================
+const DOUYIN_UA_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
+const DOUYIN_UA_DESK = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+function _decodeDouyinUrl(s) {
+    if (!s) return s;
+    return s.replace(/\\u002F/gi, '/').replace(/\\\//g, '/').replace(/\\u0026/gi, '&').replace(/&amp;/g, '&');
+}
+
+// Extract aweme_id from any Douyin URL format
+function extractDouyinAwemeId(url) {
+    const m = url.match(/(?:\/video|\/share\/video|\/aweme)\/(\d{10,})/)
+        || url.match(/modal_id=(\d{10,})/);
+    return m ? m[1] : null;
+}
+
+// Resolve v.douyin.com short link → aweme_id + final canonical URL
 async function resolveDouyinShort(url) {
-    // v.douyin.com/<code>/ → follow redirect to full iesdouyin URL, then extract aweme_id
     try {
         const r = await axios.get(url, {
-            maxRedirects: 10, timeout: 10000, validateStatus: () => true,
-            headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1' }
+            maxRedirects: 10, timeout: 12000, validateStatus: () => true,
+            headers: { 'User-Agent': DOUYIN_UA_IOS }
         });
         const finalUrl = r.request?.res?.responseUrl || url;
-        const m = finalUrl.match(/(?:video|share\/video)\/(\d+)/);
-        if (m) return `https://www.douyin.com/video/${m[1]}`;
-        return finalUrl;
-    } catch { return url; }
+        const id = extractDouyinAwemeId(finalUrl);
+        return { finalUrl, awemeId: id };
+    } catch (e) {
+        console.log('[douyin] resolveShort failed:', e.message);
+        return { finalUrl: url, awemeId: extractDouyinAwemeId(url) };
+    }
+}
+
+// Primary: fetch iesdouyin share page and extract play_addr + video_id
+// Returns { playUrl, title, video_id } or null
+async function scrapeIesdouyinShare(awemeId) {
+    const pageUrl = `https://www.iesdouyin.com/share/video/${awemeId}/`;
+    try {
+        const r = await axios.get(pageUrl, {
+            timeout: 15000, validateStatus: () => true, maxRedirects: 5,
+            headers: { 'User-Agent': DOUYIN_UA_IOS, 'Referer': 'https://www.douyin.com/' }
+        });
+        if (r.status !== 200 || !r.data || r.data.length < 1000) {
+            console.log('[douyin] iesdouyin bad response:', r.status, r.data?.length);
+            return null;
+        }
+        const html = r.data;
+
+        // play_addr.url_list[0] — the primary video URL
+        const playMatch = html.match(/"play_addr":\s*\{\s*"uri":"([^"]+)"\s*,\s*"url_list":\s*\["([^"]+)"/);
+        // video_id from the play URL
+        let videoId = null;
+        if (playMatch) {
+            const decoded = _decodeDouyinUrl(playMatch[2]);
+            const vm = decoded.match(/[?&]video_id=([\w\d]+)/);
+            if (vm) videoId = vm[1];
+        }
+        // title
+        let title = 'Douyin Video';
+        const titleMatch = html.match(/"desc":"([^"]{1,120})"/);
+        if (titleMatch) {
+            try { title = JSON.parse(`"${titleMatch[1]}"`).slice(0, 120) || title; } catch { title = titleMatch[1].slice(0, 120); }
+        }
+
+        // Prefer HD no-watermark URL via aweme.snssdk.com/aweme/v1/play
+        if (videoId) {
+            return {
+                playUrl: `https://aweme.snssdk.com/aweme/v1/play/?video_id=${videoId}&ratio=1080p&line=0`,
+                playUrlWm: `https://aweme.snssdk.com/aweme/v1/playwm/?video_id=${videoId}&ratio=1080p&line=0`,
+                title, videoId,
+            };
+        }
+        // Fallback: whatever URL the page gave us (may have watermark)
+        if (playMatch) {
+            const decoded = _decodeDouyinUrl(playMatch[2]);
+            return { playUrl: decoded.replace('/playwm/', '/play/'), playUrlWm: decoded, title };
+        }
+        return null;
+    } catch (e) {
+        console.log('[douyin] scrape iesdouyin failed:', e.message);
+        return null;
+    }
 }
 
 async function downloadDouyinVideo(url) {
-    // 1. normalize modal_id / v.douyin.com / iesdouyin → canonical douyin.com/video/<id>
-    let canonical = normalizeDouyinUrl(url);
-    if (/^https?:\/\/v\.douyin\.com\//i.test(canonical) || /iesdouyin\.com/i.test(canonical)) {
-        canonical = await resolveDouyinShort(canonical);
+    // 1. Get aweme_id (from modal_id, /video/, or by resolving short link)
+    let normalized = normalizeDouyinUrl(url);
+    let awemeId = extractDouyinAwemeId(normalized);
+    let canonical = normalized;
+
+    if (!awemeId && (/^https?:\/\/v\.douyin\.com\//i.test(normalized) || /iesdouyin\.com/i.test(normalized))) {
+        const { finalUrl, awemeId: id } = await resolveDouyinShort(normalized);
+        canonical = finalUrl;
+        awemeId = id || extractDouyinAwemeId(finalUrl);
     }
 
+    console.log('[douyin] input:', url, '→ aweme:', awemeId || '(none)');
+
     const apis = [
-        // TikWM supports Douyin too
+        // 1) Primary: iesdouyin share page → no-watermark HD URL
         async () => {
-            const res = await axios.post('https://www.tikwm.com/api/', { url: canonical, hd: 1 }, {
-                timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-            });
-            if (res.data?.code === 0 && (res.data?.data?.play || res.data?.data?.hdplay))
-                return { url: res.data.data.hdplay || res.data.data.play, title: res.data.data.title || 'Douyin Video' };
-            throw new Error('TikWM douyin failed');
+            if (!awemeId) throw new Error('no aweme_id');
+            const scraped = await scrapeIesdouyinShare(awemeId);
+            if (!scraped?.playUrl) throw new Error('iesdouyin scrape: no play URL');
+            const sizeInfo = await checkVideoSize(scraped.playUrl);
+            return { url: scraped.playUrl, title: scraped.title, ...sizeInfo };
         },
-        // yt-dlp with Douyin Referer + mobile UA
+        // 2) TikWM (sometimes supports Douyin URLs)
         async () => {
-            const info = await youtubedl(canonical, {
+            const target = awemeId ? `https://www.douyin.com/video/${awemeId}` : canonical;
+            const res = await axios.post('https://www.tikwm.com/api/', { url: target, hd: 1 }, {
+                timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': DOUYIN_UA_DESK }
+            });
+            if (res.data?.code === 0 && (res.data?.data?.play || res.data?.data?.hdplay)) {
+                const u = res.data.data.hdplay || res.data.data.play;
+                const sizeInfo = await checkVideoSize(u);
+                return { url: u, title: res.data.data.title || 'Douyin Video', ...sizeInfo };
+            }
+            throw new Error('TikWM douyin: ' + (res.data?.msg || 'no play'));
+        },
+        // 3) yt-dlp with iOS UA + Douyin Referer
+        async () => {
+            const target = awemeId ? `https://www.douyin.com/video/${awemeId}` : canonical;
+            const info = await youtubedl(target, {
                 dumpSingleJson: true, noWarnings: true, noCheckCertificates: true,
                 addHeader: [
                     'Referer:https://www.douyin.com/',
-                    'User-Agent:Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+                    `User-Agent:${DOUYIN_UA_IOS}`,
                 ],
             });
-            const finalUrl = info.url || info.formats?.slice().reverse().find(f => f.vcodec !== 'none')?.url;
-            if (finalUrl) return { url: finalUrl, title: info.title || 'Douyin Video' };
-            throw new Error('yt-dlp douyin failed');
-        },
-        // snaptik mirror (accepts douyin URLs)
-        async () => {
-            const res = await axios.get('https://snaptikvideo.com/tikwm.php', {
-                params: { url: canonical, hd: 1 }, timeout: 15000,
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-            if (res.data?.url) return { url: res.data.url, title: 'Douyin Video' };
-            throw new Error('SnapTik douyin failed');
+            const finalUrl = info.url
+                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none')?.url
+                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none')?.url;
+            if (!finalUrl) throw new Error('yt-dlp douyin: no format');
+            const sizeInfo = await checkVideoSize(finalUrl);
+            return { url: finalUrl, title: info.title || 'Douyin Video', ...sizeInfo };
         },
     ];
 
-    for (const api of apis) {
+    for (let i = 0; i < apis.length; i++) {
         try {
-            const result = await retryWithBackoff(api);
+            const result = await retryWithBackoff(apis[i]);
             if (result?.url) {
-                const sizeInfo = await checkVideoSize(result.url);
-                return { ...result, ...sizeInfo };
+                console.log(`[douyin] ✓ API ${i + 1} succeeded`);
+                return result;
             }
-        } catch (e) { console.log('Douyin API failed:', e.message); }
+        } catch (e) { console.log(`[douyin] ✗ API ${i + 1} failed:`, e.message); }
     }
+    console.log('[douyin] all APIs exhausted for:', url);
     return null;
 }
 
