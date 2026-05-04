@@ -414,6 +414,8 @@ app.get('/dashboard', (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
+let slideshowCache = new Map();
+
 // ============================================================
 // 🔤 REGEX PATTERNS - Expanded Platform Support
 // ============================================================
@@ -1092,6 +1094,44 @@ bot.on('callback_query', async (query) => {
             bot.deleteMessage(chatId, proc.message_id).catch(() => { });
         }
     }
+
+    if (data.startsWith('slides_photos_')) {
+        const sid = data.replace('slides_photos_', '');
+        const info = slideshowCache.get(sid);
+        if (!info) {
+            bot.answerCallbackQuery(query.id, { text: '⚠️ Phiên đã hết hạn!', show_alert: true });
+            return;
+        }
+        bot.answerCallbackQuery(query.id, { text: '🖼️ Đang gửi ảnh...' });
+        try {
+            // Send in batches of 10 (Telegram media group limit)
+            for (let i = 0; i < info.images.length; i += 10) {
+                const batch = info.images.slice(i, i + 10).map(img => ({ type: 'photo', media: img }));
+                await bot.sendMediaGroup(chatId, batch, { reply_to_message_id: messageId });
+            }
+        } catch (e) {
+            bot.sendMessage(chatId, '❌ Lỗi gửi ảnh: ' + e.message);
+        }
+    }
+
+    if (data.startsWith('slides_music_')) {
+        const sid = data.replace('slides_music_', '');
+        const info = slideshowCache.get(sid);
+        if (!info) {
+            bot.answerCallbackQuery(query.id, { text: '⚠️ Phiên đã hết hạn!', show_alert: true });
+            return;
+        }
+        bot.answerCallbackQuery(query.id, { text: '🎵 Đang gửi nhạc...' });
+        try {
+            if (info.music) {
+                await bot.sendAudio(chatId, info.music, { reply_to_message_id: messageId, caption: info.title });
+            } else {
+                bot.sendMessage(chatId, '❌ Không tìm thấy nhạc nền.');
+            }
+        } catch (e) {
+            bot.sendMessage(chatId, '❌ Lỗi gửi nhạc: ' + e.message);
+        }
+    }
 });
 
 // ============================================================
@@ -1228,12 +1268,39 @@ async function processQueue() {
             case 'youtube': videoData = await downloadYouTubeVideo(request.url); break;
             case 'instagram': videoData = await downloadInstagramVideo(request.url); break;
             case 'twitter': videoData = await downloadTwitterVideo(request.url); break;
+            case 'pinterest': videoData = await downloadPinterestVideo(request.url); break;
             case 'reddit': videoData = await downloadRedditVideo(request.url); break;
             case 'bilibili': videoData = await downloadBilibiliVideo(request.url); break;
+            case 'snapchat': videoData = await downloadSnapchatVideo(request.url); break;
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
-        if (!videoData || (!videoData.url && !videoData.isTooLarge)) throw new Error('Could not retrieve video URL');
+        if (!videoData || (!videoData.url && !videoData.isTooLarge && !videoData.isSlideshow)) throw new Error('Could not retrieve video URL');
+
+        if (videoData.isSlideshow) {
+            const sid = Math.random().toString(36).slice(2, 10);
+            slideshowCache.set(sid, { images: videoData.images, music: videoData.music, title: videoData.title });
+            
+            await bot.editMessageText(
+                `📸 *Đây là một bộ ảnh TikTok*\n\nBạn muốn tải gì?`,
+                {
+                    chat_id: request.chatId,
+                    message_id: processingMsg.message_id,
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: `🖼️ Tải ${videoData.images.length} ảnh`, callback_data: `slides_photos_${sid}` }],
+                            [{ text: '🎵 Tải nhạc nền (MP3)', callback_data: `slides_music_${sid}` }]
+                        ]
+                    }
+                }
+            );
+            // Don't log as success yet until they choose? Or log now as it's processed.
+            stats.successfulDownloads++;
+            dailyStats.downloads++;
+            saveData();
+            return;
+        }
 
         if (videoData.isTooLarge) {
             await bot.sendMessage(request.chatId,
@@ -1375,8 +1442,15 @@ async function getVideoNoWatermark(url) {
             const res = await axios.post('https://www.tikwm.com/api/', { url: normalizedUrl, hd: 1 }, {
                 timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
             });
-            if (res.data?.code === 0 && (res.data?.data?.play || res.data?.data?.hdplay))
-                return { url: res.data.data.hdplay || res.data.data.play, title: res.data.data.title };
+            if (res.data?.code === 0) {
+                const d = res.data.data;
+                if (d.images && d.images.length > 0) {
+                    return { isSlideshow: true, images: d.images, music: d.music, title: d.title };
+                }
+                if (d.play || d.hdplay) {
+                    return { url: d.hdplay || d.play, title: d.title };
+                }
+            }
             throw new Error('TikWM failed');
         },
         async () => {
@@ -1647,6 +1721,34 @@ async function downloadBilibiliVideo(url) {
         }
         throw new Error('Bilibili API failed');
     } catch (e) { console.error('Bilibili failed:', e.message); return null; }
+}
+
+async function downloadPinterestVideo(url) {
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url }, {
+            timeout: 15000,
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (res.data?.url) return { url: res.data.url, title: 'Pinterest Video', sizeMB: 0, isTooLarge: false };
+        throw new Error('Cobalt failed for Pinterest');
+    } catch (e) {
+        console.error('Pinterest failed:', e.message);
+        return null;
+    }
+}
+
+async function downloadSnapchatVideo(url) {
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url }, {
+            timeout: 15000,
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        if (res.data?.url) return { url: res.data.url, title: 'Snapchat Video', sizeMB: 0, isTooLarge: false };
+        throw new Error('Cobalt failed for Snapchat');
+    } catch (e) {
+        console.error('Snapchat failed:', e.message);
+        return null;
+    }
 }
 
 // ============================================================
