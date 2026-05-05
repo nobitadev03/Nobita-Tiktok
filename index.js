@@ -66,7 +66,7 @@ let botSettings = {
     maxFileSizeMB: 50,
     rateLimitWindow: 10000,
     defaultRateLimit: 3,
-    captionText: '👑 Admin: @phamtheson\n⭐ Bot tải video không logo',
+    captionText: '┏━━━━━━━━━━━━━━━━━━┓\n┃  🎬 NOBITA DOWNLOADER \n┗━━━━━━━━━━━━━━━━━━┛\n\n👤 Admin: @phamtheson\n⭐ Powered by Nobita Bot v3.0',
     welcomeMsg: '',
     autoDeleteProcessing: true,
     notifyAdmin: true,
@@ -690,22 +690,36 @@ async function handleSuspiciousUser(userId, username) {
 bot.onText(/^\/start$/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
-    const username = msg.from?.first_name || 'bạn';
+    const first_name = msg.from?.first_name || 'bạn';
     const badge = getUserBadge(userId);
-    const supportedPlatforms = Object.values(PLATFORMS).map(p => ` ${p.emoji} ${p.name}`).join('\n');
+    const supportedPlatforms = Object.values(PLATFORMS).map(p => `${p.emoji} ${p.name}`).join('  |  ');
 
-    await bot.sendMessage(chatId,
-        `${badge ? badge + ' ' : ''}👋 Chào *${username}*! Mình là *Nobita Bot v${BOT_VERSION}*\n\n` +
-        (maintenanceMode ? '⚠️ *Bot đang bảo trì!* Vui lòng quay lại sau.\n\n' : '') +
-        `📹 *Hỗ trợ tải video từ:*\n${supportedPlatforms}\n\n` +
-        `💡 Gõ /help để xem đầy đủ lệnh.`,
-        {
-            parse_mode: 'Markdown',
-            reply_markup: isAdmin(userId) ? {
-                inline_keyboard: [[{ text: '🖥️ Admin Dashboard', url: DASHBOARD_URL }]]
-            } : {}
+    const startMsg = 
+        `┏━━━━━━━━━━━━━━━━━━┓\n` +
+        `┃   🚀  NOBITA BOT v${BOT_VERSION}  ┃\n` +
+        `┗━━━━━━━━━━━━━━━━━━┛\n\n` +
+        `👋 Chào *${first_name}*! ${badge}\n` +
+        `Mình là công cụ hỗ trợ tải video *Không Logo* chất lượng cao.\n\n` +
+        (maintenanceMode ? `⚠️ *CHẾ ĐỘ BẢO TRÌ:* Bot đang nâng cấp, vui lòng quay lại sau.\n\n` : '') +
+        `💎 *Tính năng nổi bật:*\n` +
+        `├ ⚡️ Tốc độ tải cực nhanh\n` +
+        `├ 🎬 Giữ nguyên chất lượng Gốc\n` +
+        `└ 🎵 Hỗ trợ trích xuất MP3\n\n` +
+        `🌐 *Nền tảng hỗ trợ:*\n` +
+        `${supportedPlatforms}\n\n` +
+        `💡 *Cách dùng:* Chỉ cần dán link video vào đây!\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `👉 Gõ /help để xem danh sách lệnh.`;
+
+    await bot.sendMessage(chatId, startMsg, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: '📑 Hướng dẫn sử dụng', callback_data: 'help_main' }],
+                isAdmin(userId) ? [{ text: '🖥️ Admin Dashboard', url: DASHBOARD_URL }] : []
+            ].filter(r => r.length > 0)
         }
-    );
+    });
 });
 
 // /help - Tùy theo quyền Admin hay User thường
@@ -714,62 +728,44 @@ bot.onText(/^\/help$/, async (msg) => {
     const userId = msg.from?.id;
     const isAdminUser = userId === ADMIN_USER_ID;
 
-    let text = `📖 *Hướng dẫn Nobita Bot v${BOT_VERSION}*\n\n`;
+    let text = `📖 *TRUNG TÂM HƯỚNG DẪN*\n` +
+               `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    // Lệnh cho tất cả người dùng
-    text += `🔸 *Lệnh cơ bản:*\n`;
-    text += `• /start — Khởi động bot\n`;
-    text += `• /help — Xem hướng dẫn\n`;
-    text += `• /ping — Kiểm tra tốc độ\n`;
-    text += `• /status — Trạng thái bot\n`;
-    text += `• /platforms — Nền tảng hỗ trợ\n`;
-    text += `• /myinfo — Thông tin tài khoản\n`;
-    text += `• /history — Lịch sử tải của bạn\n`;
-    text += `• /top — Top người dùng tích cực\n`;
-    text += `• /report <nội dung> — Báo lỗi cho admin\n\n`;
+    text += `👤 *Dành cho Người dùng:*\n` +
+            `├ /start — Khởi động lại Bot\n` +
+            `├ /help — Xem bảng hướng dẫn này\n` +
+            `├ /ping — Kiểm tra độ trễ bot\n` +
+            `├ /status — Xem trạng thái hệ thống\n` +
+            `├ /platforms — Nền tảng hỗ trợ\n` +
+            `├ /myinfo — Thông tin của bạn\n` +
+            `├ /history — Lịch sử tải gần đây\n` +
+            `├ /top — BXH người dùng tích cực\n` +
+            `└ /report <link> — Báo lỗi link hỏng\n\n`;
 
-    text += `💡 Gửi link video bất kỳ để tải (không watermark).\n\n`;
+    text += `💡 *Mẹo:* Chỉ cần dán link video, hệ thống sẽ tự động xử lý và gửi lại cho bạn trong giây lát.\n\n`;
 
-    // Lệnh chỉ Admin thấy
     if (isAdminUser) {
-        text += `👑 *Lệnh Admin (Chỉ bạn nhìn thấy):*\n`;
-        text += `• /stats — Thống kê đầy đủ\n`;
-        text += `• /panel — Mở nhanh panel\n`;
-        text += `• /botinfo — Thông tin hệ thống\n`;
-        text += `• /users — Danh sách users\n`;
-        text += `• /vips — Danh sách VIP\n`;
-        text += `• /premiums — Danh sách Premium\n`;
-        text += `• /limits — Giới hạn tùy chỉnh\n`;
-        text += `• /queue — Xem hàng đợi\n`;
-        text += `• /clearqueue — Xóa hàng đợi\n`;
-        text += `• /broadcast <text> — Gửi thông báo\n`;
-        text += `• /announce <text> — Thông báo quan trọng\n`;
-        text += `• /ban <id> — Ban user\n`;
-        text += `• /unban <id> — Gỡ ban\n`;
-        text += `• /warn <id> [lý do] — Cảnh cáo\n`;
-        text += `• /clearwarn <id> — Xóa cảnh cáo\n`;
-        text += `• /mute <id> — Khóa nhắn tin\n`;
-        text += `• /unmute <id> — Mở khóa\n`;
-        text += `• /addvip <id> — Cấp VIP\n`;
-        text += `• /removevip <id> — Thu hồi VIP\n`;
-        text += `• /premium <id> — Cấp Premium\n`;
-        text += `• /removepremium <id> — Thu hồi Premium\n`;
-        text += `• /setlimit <id> <số> — Giới hạn request\n`;
-        text += `• /resetlimit <id> — Reset giới hạn\n`;
-        text += `• /slowmode <id> <giây> — Bật slowmode\n`;
-        text += `• /clearslowmode <id> — Tắt slowmode\n`;
-        text += `• /caption <text> — Đổi caption\n`;
-        text += `• /setmaxsize <MB> — Giới hạn file size\n`;
-        text += `• /maintenance on/off — Bật/Tắt bảo trì\n`;
+        text += `━━━━━━━━━━━━━━━━━━━━\n` +
+                `👑 *Dành cho Quản trị viên:*\n` +
+                `├ /stats — Thống kê chi tiết\n` +
+                `├ /panel — Panel quản lý nhanh\n` +
+                `├ /users — QL người dùng (Top 20)\n` +
+                `├ /broadcast <text> — Gửi TB toàn bộ\n` +
+                `├ /ban /unban <id> — Quản lý Ban\n` +
+                `├ /warn /clearwarn <id> — Quản lý Cảnh cáo\n` +
+                `├ /vips /premiums — DS User VIP\n` +
+                `├ /addvip /premium <id> — Cấp quyền\n` +
+                `└ /maintenance on/off — Bảo trì\n\n` +
+                `👉 Gõ /help_admin để xem chi tiết tất cả lệnh admin.`;
     }
 
     await bot.sendMessage(chatId, text, {
         parse_mode: 'Markdown',
         reply_markup: isAdminUser ? {
-            inline_keyboard: [
-                [{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]
-            ]
-        } : {}
+            inline_keyboard: [[{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]]
+        } : {
+            inline_keyboard: [[{ text: "👨‍💻 Liên hệ Admin", url: "https://t.me/phamtheson" }]]
+        }
     });
 });
 // /ping
@@ -1392,8 +1388,10 @@ async function processQueue() {
     try {
         const p = PLATFORMS[request.platform];
         processingMsg = await bot.sendMessage(request.chatId,
-            `⏳ Đang tải ${p ? p.emoji + ' ' + p.name : 'video'}...`,
-            { reply_to_message_id: request.messageId }
+            `✨ *Đang khởi tạo:* ${p ? p.emoji + ' ' + p.name : 'Video'}\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `⏳ Vui lòng chờ trong giây lát...`,
+            { reply_to_message_id: request.messageId, parse_mode: 'Markdown' }
         );
 
         let videoData;
@@ -1447,13 +1445,20 @@ async function processQueue() {
             );
         } else {
             const tempFile = path.join(__dirname, `temp_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
-            const writer = fs.createWriteStream(tempFile);
-            const res = await axios.get(videoData.url, {
-                responseType: 'stream', timeout: 120000,
-                headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tiktok.com/' }
-            });
-            res.data.pipe(writer);
-            await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+            
+            if (videoData.isLocal && videoData.localPath) {
+                // Video already downloaded locally (e.g. by yt-dlp)
+                fs.renameSync(videoData.localPath, tempFile);
+            } else {
+                // Download from URL
+                const writer = fs.createWriteStream(tempFile);
+                const res = await axios.get(videoData.url, {
+                    responseType: 'stream', timeout: 120000,
+                    headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tiktok.com/' }
+                });
+                res.data.pipe(writer);
+                await new Promise((resolve, reject) => { writer.on('finish', resolve); writer.on('error', reject); });
+            }
 
             const mp3Id = Math.random().toString(36).slice(2, 10);
             mp3Cache.set(mp3Id, { url: request.url, platform: request.platform });
@@ -1490,15 +1495,20 @@ async function processQueue() {
         // Log the failure to dashboard
         addActivityLog('err', `❌ Lỗi tải video của @${request.username}: ${err.message.substring(0, 50)}`);
 
-        let errMsg = '❌ ';
-        if (err.message.includes('Could not retrieve')) errMsg += 'Link không hợp lệ hoặc video đã bị xóa.';
-        else if (err.message.includes('timeout')) errMsg += 'Timeout. Vui lòng thử lại.';
-        else if (err.message.includes('quá lớn')) errMsg += err.message;
-        else errMsg += 'Lỗi không xác định. Hãy thử link khác.';
+        let errMsg = `❌ *THẤT BẠI*\n` +
+                     `━━━━━━━━━━━━━━━━━━━━\n`;
+        
+        if (err.message.includes('Could not retrieve')) errMsg += `🚫 Link không hợp lệ hoặc video đã bị xóa.`;
+        else if (err.message.includes('timeout')) errMsg += `⏰ Kết nối quá hạn. Vui lòng thử lại.`;
+        else if (err.message.includes('quá lớn')) errMsg += `⚠️ ${err.message}`;
+        else errMsg += `👾 Lỗi hệ thống: ${err.message.substring(0, 30)}`;
+
+        errMsg += `\n\n💡 *Gợi ý:* Đảm bảo link công khai và có thể xem được.`;
 
         if (processingMsg) {
-            bot.editMessageText(errMsg + '\n\n💡 Đảm bảo link hợp lệ và không bị private.', {
-                chat_id: request.chatId, message_id: processingMsg.message_id
+            bot.editMessageText(errMsg, {
+                chat_id: request.chatId, message_id: processingMsg.message_id,
+                parse_mode: 'Markdown'
             }).catch(() => { });
         }
 
@@ -1728,67 +1738,55 @@ async function downloadFacebookVideo(fbUrl) {
 
 // ▶️ YouTube
 async function downloadYouTubeVideo(url) {
-    const apis = [
-        async () => {
-            // API 1: Cobalt (Primary)
-            const res = await axios.post('https://api.cobalt.tools/', { 
-                url,
-                videoQuality: '720',
-                vCodec: 'h264'
-            }, {
-                timeout: 20000,
-                headers: { 
-                    'Accept': 'application/json', 
-                    'Content-Type': 'application/json', 
-                    'User-Agent': 'Mozilla/5.0' 
-                }
-            });
-            if (res.data?.url) {
-                return { 
-                    url: res.data.url, 
-                    title: res.data.filename || 'YouTube Video', 
-                    sizeMB: 0, 
-                    isTooLarge: false 
-                };
-            }
-            throw new Error('Cobalt failed');
-        },
-        async () => {
-            // API 2: yt-dlp (Secondary)
-            const youtubedl = require('youtube-dl-exec');
-            const info = await youtubedl(url, {
-                dumpSingleJson: true,
-                noWarnings: true,
-                noCheckCertificates: true,
-                preferFreeFormats: false, // Better for combined formats
-                addHeader: ['User-Agent:Mozilla/5.0']
-            });
+    try {
+        const youtubedl = require('youtube-dl-exec');
+        const tempPath = path.join(__dirname, `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+        
+        // 1. First get info to check duration
+        const info = await youtubedl(url, {
+            dumpSingleJson: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0']
+        });
 
-            if (info.duration > 600) throw new Error('Video quá lớn (chỉ hỗ trợ dưới 10 phút)');
+        if (info.duration > 600) throw new Error('Video quá lớn (chỉ hỗ trợ dưới 10 phút)');
 
-            // Try to find a combined format (video + audio)
-            let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
-                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
+        // 2. Download and merge using yt-dlp directly
+        await youtubedl(url, {
+            output: tempPath,
+            format: 'bestvideo+bestaudio/best',
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0'],
+            // ffmpegLocation is set in process.env.FFMPEG_PATH
+        });
 
-            const finalUrl = format ? format.url : (info.url || info.webpage_url);
-            if (!finalUrl || finalUrl.includes('manifest')) throw new Error('No direct format found');
-
+        if (fs.existsSync(tempPath)) {
             return { 
-                url: finalUrl, 
-                title: info.title || 'YouTube Video', 
-                sizeMB: 0, 
-                isTooLarge: false 
+                isLocal: true,
+                localPath: tempPath,
+                url: url, // For reference
+                title: info.title || 'YouTube Video',
+                sizeMB: fs.statSync(tempPath).size / 1024 / 1024,
+                isTooLarge: false
             };
         }
-    ];
-
-    for (const api of apis) {
+        
+        throw new Error('yt-dlp download failed');
+    } catch (e) {
+        console.error('YouTube download failed:', e.message);
+        
+        // Fallback to Cobalt just in case yt-dlp fails (e.g. storage issues)
         try {
-            const result = await api();
-            if (result?.url) return result;
-        } catch (e) {
-            console.error('YouTube API fallback failed:', e.message);
-        }
+            const res = await axios.post('https://api.cobalt.tools/', { 
+                url, videoQuality: '720', vCodec: 'h264'
+            }, {
+                timeout: 20000,
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.url) return { url: res.data.url, title: res.data.filename || 'YouTube Video', sizeMB: 0, isTooLarge: false };
+        } catch (err) { }
     }
     return null;
 }
