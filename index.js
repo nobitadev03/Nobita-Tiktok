@@ -7,6 +7,14 @@ const express = require('express');
 const EventEmitter = require('events');
 const activityEmitter = new EventEmitter();
 
+// Setup FFmpeg path
+try {
+    const ffmpeg = require('@ffmpeg-installer/ffmpeg');
+    process.env.FFMPEG_PATH = ffmpeg.path;
+} catch (e) {
+    console.warn('⚠️ FFmpeg installer not found, using system PATH');
+}
+
 // ============================================================
 // 🤖 NOBITA BOT v3.0 - Ultimate Edition
 // ============================================================
@@ -1719,20 +1727,70 @@ async function downloadFacebookVideo(fbUrl) {
 }
 
 // ▶️ YouTube
-const youtubedl = require('youtube-dl-exec');
 async function downloadYouTubeVideo(url) {
-    try {
-        const info = await youtubedl(url, {
-            dumpSingleJson: true, noWarnings: true, noCheckCertificates: true,
-            preferFreeFormats: true, youtubeSkipDashManifest: true
-        });
-        if (info.duration > 600) throw new Error('Video quá lớn (chỉ hỗ trợ dưới 10 phút)');
-        let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
-            || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
-        const finalUrl = format ? format.url : info.url;
-        if (!finalUrl) throw new Error('No format found');
-        return { url: finalUrl, title: info.title, sizeMB: 0, isTooLarge: false };
-    } catch (e) { console.error('YT failed:', e.message); return null; }
+    const apis = [
+        async () => {
+            // API 1: Cobalt (Primary)
+            const res = await axios.post('https://api.cobalt.tools/', { 
+                url,
+                videoQuality: '720',
+                vCodec: 'h264'
+            }, {
+                timeout: 20000,
+                headers: { 
+                    'Accept': 'application/json', 
+                    'Content-Type': 'application/json', 
+                    'User-Agent': 'Mozilla/5.0' 
+                }
+            });
+            if (res.data?.url) {
+                return { 
+                    url: res.data.url, 
+                    title: res.data.filename || 'YouTube Video', 
+                    sizeMB: 0, 
+                    isTooLarge: false 
+                };
+            }
+            throw new Error('Cobalt failed');
+        },
+        async () => {
+            // API 2: yt-dlp (Secondary)
+            const youtubedl = require('youtube-dl-exec');
+            const info = await youtubedl(url, {
+                dumpSingleJson: true,
+                noWarnings: true,
+                noCheckCertificates: true,
+                preferFreeFormats: false, // Better for combined formats
+                addHeader: ['User-Agent:Mozilla/5.0']
+            });
+
+            if (info.duration > 600) throw new Error('Video quá lớn (chỉ hỗ trợ dưới 10 phút)');
+
+            // Try to find a combined format (video + audio)
+            let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
+                || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
+
+            const finalUrl = format ? format.url : (info.url || info.webpage_url);
+            if (!finalUrl || finalUrl.includes('manifest')) throw new Error('No direct format found');
+
+            return { 
+                url: finalUrl, 
+                title: info.title || 'YouTube Video', 
+                sizeMB: 0, 
+                isTooLarge: false 
+            };
+        }
+    ];
+
+    for (const api of apis) {
+        try {
+            const result = await api();
+            if (result?.url) return result;
+        } catch (e) {
+            console.error('YouTube API fallback failed:', e.message);
+        }
+    }
+    return null;
 }
 
 // 📸 Instagram
