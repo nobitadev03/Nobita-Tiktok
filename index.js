@@ -1259,12 +1259,12 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
     const cmd = match[1];
     const args = match[2]?.trim() || '';
 
+    const USER_CMDS = ['start','help','ping','status','platforms','myinfo',
+        'history','top','report','joke','meme','riddle','quiz','dice','coin'];
+    if (USER_CMDS.includes(cmd)) return;
+
     if (!ADMIN_CMDS.includes(cmd)) return;
     if (!isAdmin(userId)) {
-        bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
-        return;
-    }
-
     switch (cmd) {
         case 'stats': {
             const rate = stats.totalRequests > 0 ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
