@@ -1265,6 +1265,10 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
 
     if (!ADMIN_CMDS.includes(cmd)) return;
     if (!isAdmin(userId)) {
+    return bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
+}
+
+switch (cmd) {
     switch (cmd) {
         case 'stats': {
             const rate = stats.totalRequests > 0 ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
