@@ -1268,7 +1268,6 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
         bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
         return;
     }
-switch (cmd) {
     switch (cmd) {
         case 'stats': {
             const rate = stats.totalRequests > 0 ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
