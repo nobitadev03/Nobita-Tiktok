@@ -1265,9 +1265,9 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
 
     if (!ADMIN_CMDS.includes(cmd)) return;
     if (!isAdmin(userId)) {
-    return bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
-}
-
+        bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
+        return;
+    }
 switch (cmd) {
     switch (cmd) {
         case 'stats': {
