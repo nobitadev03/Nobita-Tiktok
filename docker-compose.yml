@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  nobita-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nobita-tiktok-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_USER_ID=${ADMIN_USER_ID}
+      - DASHBOARD_TOKEN=${DASHBOARD_TOKEN}
+      - MAX_CONCURRENT_REQUESTS=5
+      - LOG_LEVEL=info
+      - DB_PATH=./data/bot.db
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - /app/node_modules
+    networks:
+      - nobita-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  nobita-network:
+    driver: bridge

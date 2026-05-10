@@ -691,6 +691,24 @@ app.get('/api/user/:userId/details', requireAdminToken, (req, res) => {
     });
 });
 
+// Activity logs endpoint - for dashboard
+app.get('/api/stats/activity', requireAdminToken, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit || 50), 200);
+    const logs = activityLogs.slice(0, limit);
+    res.json({
+        success: true,
+        data: logs,
+    });
+});
+
+// Clear queue endpoint - for dashboard
+app.post('/api/admin/clearqueue', requireAdminToken, (req, res) => {
+    const cleared = requestQueue.length;
+    requestQueue.length = 0;
+    addActivityLog('warn', `🗑️ Admin đã xóa hàng đợi (${cleared} items)`);
+    res.json({ success: true, cleared });
+});
+
 async function runBroadcastScheduler() {
     const now = Date.now();
     for (const item of scheduledBroadcasts.values()) {

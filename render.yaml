@@ -3,9 +3,12 @@ services:
     name: nobita-tiktok-bot
     env: node
     plan: free
+    runtime: node-18
     buildCommand: npm install
-    startCommand: node index.js
+    startCommand: npm start
     healthCheckPath: /health
+    healthCheckInterval: 30
+    numInstances: 1
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
@@ -17,3 +20,5 @@ services:
         value: "3"
       - key: NODE_ENV
         value: production
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=512"

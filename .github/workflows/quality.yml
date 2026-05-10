@@ -1,0 +1,40 @@
+name: Code Quality
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check package.json
+        run: |
+          node -e "const p = require('./package.json'); console.log('✅ package.json valid:', p.name, p.version)"
+      
+      - name: Verify critical files
+        run: |
+          files=("index.js" "package.json" ".env.example" "public/dashboard.html")
+          for file in "${files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✅ $file found"
+            else
+              echo "⚠️  $file not found"
+            fi
+          done
+      
+      - name: Check for secrets in code
+        run: |
+          echo "Scanning for hardcoded secrets..."
+          ! grep -r "Bearer\|token\|password" --include="*.js" src/ index.js | grep -v "process.env" | grep -v "//"
