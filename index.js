@@ -2110,6 +2110,12 @@ async function normalizeFbUrl(fbUrl) {
 async function downloadSoundCloudAudio(url) {
     try {
         const youtubedl = getYtDlExec();
+
+        const tempPath = path.join(
+            __dirname,
+            `soundcloud_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`
+        );
+
         const info = await youtubedl(url, {
             dumpSingleJson: true,
             noWarnings: true,
@@ -2117,23 +2123,32 @@ async function downloadSoundCloudAudio(url) {
             addHeader: ['User-Agent:Mozilla/5.0']
         });
 
-        const format = info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none' && (f.vcodec === 'none' || !f.vcodec))
-            || info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none');
-        const audioUrl = format?.url || info.url;
-        if (!audioUrl) throw new Error('Không lấy được audio từ SoundCloud');
+        await youtubedl(url, {
+            extractAudio: true,
+            audioFormat: 'mp3',
+            audioQuality: '0',
+            output: tempPath,
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0']
+        });
 
-        const sizeInfo = await checkVideoSize(audioUrl);
+        if (!fs.existsSync(tempPath)) {
+            throw new Error('Không tải được file SoundCloud');
+        }
+
         return {
-            url: audioUrl,
-            title: info.title || 'SoundCloud Audio',
             isAudio: true,
-            ...sizeInfo
+            isLocal: true,
+            localPath: tempPath,
+            title: info.title || 'SoundCloud Audio',
+            sizeMB: fs.statSync(tempPath).size / 1024 / 1024,
+            isTooLarge: false
         };
     } catch (e) {
         throw new Error(e.message || 'SoundCloud download failed');
     }
 }
-
 async function downloadFacebookVideo(fbUrl) {
     const realUrl = await normalizeFbUrl(fbUrl);
 
