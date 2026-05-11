@@ -1976,6 +1976,26 @@ async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 1000) {
     }
 }
 
+function getYtDlExec() {
+    let module = null;
+    try {
+        module = require('youtube-dl-exec');
+    } catch (e) {
+        if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    }
+    if (!module) {
+        try {
+            module = require('yt-dlp-exec');
+        } catch (e) {
+            if (e.code !== 'MODULE_NOT_FOUND') throw e;
+        }
+    }
+    if (!module) {
+        throw new Error('Module youtube-dl-exec hoặc yt-dlp-exec chưa được cài đặt');
+    }
+    return module;
+}
+
 async function checkVideoSize(url) {
     try {
         const r = await axios.head(url, { timeout: 10000, maxRedirects: 5 });
@@ -2089,7 +2109,7 @@ async function normalizeFbUrl(fbUrl) {
 
 async function downloadSoundCloudAudio(url) {
     try {
-        const youtubedl = require('youtube-dl-exec');
+        const youtubedl = getYtDlExec();
         const info = await youtubedl(url, {
             dumpSingleJson: true,
             noWarnings: true,
@@ -2119,7 +2139,7 @@ async function downloadFacebookVideo(fbUrl) {
 
     const apis = [
         async () => {
-            const youtubedl = require('youtube-dl-exec');
+            const youtubedl = getYtDlExec();
             const info = await youtubedl(realUrl, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
             let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
                 || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
@@ -2204,7 +2224,7 @@ async function downloadFacebookVideo(fbUrl) {
 // ▶️ YouTube
 async function downloadYouTubeVideo(url) {
     try {
-        const youtubedl = require('youtube-dl-exec');
+        const youtubedl = getYtDlExec();
         const tempPath = path.join(__dirname, `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
         
         // 1. First get info to check duration
