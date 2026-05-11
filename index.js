@@ -745,6 +745,7 @@ const PLATFORMS = {
     snapchat: { regex: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/(?:spotlight|add|discover)\/[\w-]+/i, emoji: '👻', name: 'Snapchat' },
     reddit: { regex: /(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/i, emoji: '🤖', name: 'Reddit' },
     bilibili: { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
+    soundcloud: { regex: /(?:https?:\/\/)?(?:(?:www|on)\.)?soundcloud\.com\/(?:[\w-]+\/[\w-]+|[\w-]+)/i, emoji: '🎧', name: 'SoundCloud' },
 };
 
 function detectPlatform(text) {
@@ -1259,15 +1260,12 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
     const cmd = match[1];
     const args = match[2]?.trim() || '';
 
-    const USER_CMDS = ['start','help','ping','status','platforms','myinfo',
-        'history','top','report','joke','meme','riddle','quiz','dice','coin'];
-    if (USER_CMDS.includes(cmd)) return;
-
     if (!ADMIN_CMDS.includes(cmd)) return;
     if (!isAdmin(userId)) {
         bot.sendMessage(chatId, '❌ Bạn không có quyền dùng lệnh này.');
         return;
     }
+
     switch (cmd) {
         case 'stats': {
             const rate = stats.totalRequests > 0 ? ((stats.successfulDownloads / stats.totalRequests) * 100).toFixed(1) : 0;
@@ -1795,6 +1793,7 @@ async function processQueue() {
             case 'reddit': videoData = await downloadRedditVideo(request.url); break;
             case 'bilibili': videoData = await downloadBilibiliVideo(request.url); break;
             case 'snapchat': videoData = await downloadSnapchatVideo(request.url); break;
+            case 'soundcloud': videoData = await downloadSoundCloudAudio(request.url); break;
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
@@ -1825,6 +1824,30 @@ async function processQueue() {
             maybeSendFun(request.chatId, pickRandom(FUN.successLines));
             handleComboMessage(request.chatId, request.userId);
             saveData();
+            return;
+        }
+
+        if (videoData.isAudio) {
+            const audioSource = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
+            await bot.sendAudio(request.chatId, audioSource, {
+                caption: botSettings.captionText,
+                reply_to_message_id: request.messageId,
+                title: videoData.title
+            });
+            if (videoData.isLocal && videoData.localPath) {
+                fs.unlink(videoData.localPath, () => { });
+            }
+            if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+            stats.successfulDownloads++;
+            dailyStats.downloads++;
+            recordPlatformSuccess(request.platform);
+            maybeSendFun(request.chatId, pickRandom(FUN.successLines));
+            handleComboMessage(request.chatId, request.userId);
+            recordHistory(request.userId, request.url, request.platform);
+            saveData();
+            console.log(`[✅] ${request.platform} audio sent to @${request.username}`);
+            const platformInfo = PLATFORMS[request.platform];
+            addActivityLog('ok', `✅ Tải xong ${platformInfo ? platformInfo.name : 'audio'} cho @${request.username} (ID: ${request.userId})`);
             return;
         }
 
@@ -2062,6 +2085,33 @@ async function normalizeFbUrl(fbUrl) {
         } catch { }
     }
     return fbUrl;
+}
+
+async function downloadSoundCloudAudio(url) {
+    try {
+        const youtubedl = require('youtube-dl-exec');
+        const info = await youtubedl(url, {
+            dumpSingleJson: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0']
+        });
+
+        const format = info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none' && (f.vcodec === 'none' || !f.vcodec))
+            || info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none');
+        const audioUrl = format?.url || info.url;
+        if (!audioUrl) throw new Error('Không lấy được audio từ SoundCloud');
+
+        const sizeInfo = await checkVideoSize(audioUrl);
+        return {
+            url: audioUrl,
+            title: info.title || 'SoundCloud Audio',
+            isAudio: true,
+            ...sizeInfo
+        };
+    } catch (e) {
+        throw new Error(e.message || 'SoundCloud download failed');
+    }
 }
 
 async function downloadFacebookVideo(fbUrl) {
