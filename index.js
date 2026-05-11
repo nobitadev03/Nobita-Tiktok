@@ -1797,7 +1797,9 @@ async function processQueue() {
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
-        if (!videoData || (!videoData.url && !videoData.isTooLarge && !videoData.isSlideshow)) throw new Error('Could not retrieve video URL');
+        if (!videoData || (!videoData.url && !videoData.localPath && !videoData.isSlideshow)) {
+            throw new Error('Could not retrieve media');
+        }
 
         if (videoData.isSlideshow) {
             const sid = Math.random().toString(36).slice(2, 10);
@@ -1829,14 +1831,34 @@ async function processQueue() {
 
         if (videoData.isAudio) {
             const audioSource = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
-            await bot.sendAudio(request.chatId, audioSource, {
-                caption: botSettings.captionText,
-                reply_to_message_id: request.messageId,
-                title: videoData.title
-            });
-            if (videoData.isLocal && videoData.localPath) {
-                fs.unlink(videoData.localPath, () => { });
+
+            if (videoData.isTooLarge) {
+                await bot.sendMessage(request.chatId,
+                    `⚠️ *Audio quá lớn (${videoData.sizeMB.toFixed(1)} MB)!*\n\nTelegram giới hạn ${botSettings.maxFileSizeMB}MB, nên bot không thể gửi file này.`,
+                    { parse_mode: 'Markdown', reply_to_message_id: request.messageId }
+                );
+                if (videoData.isLocal && videoData.localPath) {
+                    fs.unlink(videoData.localPath, () => { });
+                }
+                if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+                stats.failedDownloads++;
+                recordPlatformFailure(request.platform, `Audio quá lớn (${videoData.sizeMB.toFixed(1)} MB)`);
+                saveData();
+                return;
             }
+
+            try {
+                await bot.sendAudio(request.chatId, audioSource, {
+                    caption: botSettings.captionText,
+                    reply_to_message_id: request.messageId,
+                    title: videoData.title
+                });
+            } finally {
+                if (videoData.isLocal && videoData.localPath) {
+                    fs.unlink(videoData.localPath, () => { });
+                }
+            }
+
             if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
             stats.successfulDownloads++;
             dailyStats.downloads++;
@@ -2137,13 +2159,15 @@ async function downloadSoundCloudAudio(url) {
             throw new Error('Không tải được file SoundCloud');
         }
 
+        const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+
         return {
             isAudio: true,
             isLocal: true,
             localPath: tempPath,
             title: info.title || 'SoundCloud Audio',
-            sizeMB: fs.statSync(tempPath).size / 1024 / 1024,
-            isTooLarge: false
+            sizeMB,
+            isTooLarge: sizeMB > botSettings.maxFileSizeMB
         };
     } catch (e) {
         throw new Error(e.message || 'SoundCloud download failed');
