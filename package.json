@@ -24,6 +24,6 @@
     "swagger-jsdoc": "^6.2.8",
     "winston": "^3.11.0",
     "youtube-dl-exec": "^3.1.4",
-    "yt-dlp-exec": "^1.1.2"
+    "yt-dlp-exec": "^1.0.2"
   }
 }
