@@ -16,13 +16,21 @@ try {
     const geminiApiKey = process.env.GEMINI_API_KEY;
     if (geminiApiKey) {
         gemini = new GoogleGenerativeAI(geminiApiKey);
-        geminiModel = gemini.getGenerativeModel({ model: 'gemini-pro' });
-        console.log('✅ Google Gemini AI initialized');
+        // Use gemini-1.5-flash for better speed and reliability
+        geminiModel = gemini.getGenerativeModel({ 
+            model: 'gemini-1.5-flash',
+            systemInstruction: "Bạn là Nobita Bot, một trợ lý ảo thông minh, thân thiện và đa tài. " +
+                              "Nhiệm vụ chính của bạn là hỗ trợ người dùng tải video/ảnh từ TikTok, Facebook, Instagram, YouTube... " +
+                              "Tuy nhiên, bạn cũng là một người bạn có thể trò chuyện về bất kỳ chủ đề nào: cuộc sống, công nghệ, giải trí, kiến thức... " +
+                              "Hãy trả lời bằng tiếng Việt, phong cách tự nhiên, hài hước và sử dụng emoji phù hợp. " +
+                              "Luôn sẵn lòng giải đáp các câu hỏi ngoài phạm vi tải video một cách thông minh."
+        });
+        console.log('✅ Google Gemini AI (1.5-Flash) initialized');
     } else {
         console.warn('⚠️ GEMINI_API_KEY not found, AI chat will use fallback responses');
     }
 } catch (e) {
-    console.warn('⚠️ Gemini SDK not installed or error:', e.message);
+    console.error('⚠️ Gemini AI initialization error:', e.message);
 }
 
 // Setup FFmpeg path
@@ -1020,11 +1028,16 @@ async function handleSuspiciousUser(userId, username) {
 // ============================================================
 // 🤖 BOT COMMANDS
 // ============================================================
+function escapeMarkdown(text) {
+    if (!text) return '';
+    return text.replace(/([_*`[\]()])/g, '\\$1');
+}
+
 // /start
-bot.onText(/^\/start$/, async (msg) => {
+bot.onText(/^\/start(@\w+)?$/, async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
-    const first_name = msg.from?.first_name || 'bạn';
+    const first_name = escapeMarkdown(msg.from?.first_name || 'bạn');
     const badge = getUserBadge(userId);
     const supportedPlatforms = Object.values(PLATFORMS).map(p => `${p.emoji} ${p.name}`).join('  |  ');
     const funLine = botSettings.funMode ? `\n${pickRandom(FUN.startTips)}` : '';
@@ -1055,13 +1068,13 @@ bot.onText(/^\/start$/, async (msg) => {
                 isAdmin(userId) ? [{ text: '🖥️ Admin Dashboard', url: DASHBOARD_URL }] : []
             ].filter(r => r.length > 0)
         }
+    }).catch(e => {
+        console.error('Error sending start message:', e.message);
+        bot.sendMessage(chatId, startMsg.replace(/[*_`]/g, '')).catch(() => {});
     });
 });
 
-// /help - Tùy theo quyền Admin hay User thường
-bot.onText(/^\/help$/, async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from?.id;
+async function sendHelpMessage(chatId, userId) {
     const isAdminUser = userId === ADMIN_USER_ID;
 
     let text = `📖 *TRUNG TÂM HƯỚNG DẪN*\n` +
@@ -1078,9 +1091,9 @@ bot.onText(/^\/help$/, async (msg) => {
             `├ /top — BXH người dùng tích cực\n` +
             `├ /report <link> — Báo lỗi link hỏng\n` +
             `├ /joke — Một câu đùa nhẹ\n` +
-            `├ /meme — Meme chữ vui vui\n` +
-            `├ /riddle — Một câu đố vui\n` +
-            `├ /quiz — Đố nhanh 1 câu\n` +
+            `├ /meme — Meme vui nhộn\n` +
+            `├ /riddle — Câu đố vui\n` +
+            `├ /quiz — Đố vui 1 câu\n` +
             `├ /dice — Lắc xí ngầu\n` +
             `└ /coin — Tung đồng xu\n\n`;
 
@@ -1091,24 +1104,40 @@ bot.onText(/^\/help$/, async (msg) => {
                 `👑 *Dành cho Quản trị viên:*\n` +
                 `├ /stats — Thống kê chi tiết\n` +
                 `├ /panel — Panel quản lý nhanh\n` +
-                `├ /users — QL người dùng (Top 20)\n` +
+                `├ /users — Quản lý người dùng\n` +
                 `├ /broadcast <text> — Gửi TB toàn bộ\n` +
                 `├ /ban /unban <id> — Quản lý Ban\n` +
-                `├ /warn /clearwarn <id> — Quản lý Cảnh cáo\n` +
-                `├ /vips /premiums — DS User VIP\n` +
+                `├ /warn /clearwarn <id> — Cảnh cáo\n` +
+                `├ /vips /premiums — Danh sách VIP\n` +
                 `├ /addvip /premium <id> — Cấp quyền\n` +
                 `└ /maintenance on/off — Bảo trì\n\n` +
-                `👉 Gõ /help_admin để xem chi tiết tất cả lệnh admin.`;
+                `👉 Gõ /help\\_admin để xem chi tiết lệnh admin.`;
     }
 
-    await bot.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: isAdminUser ? {
-            inline_keyboard: [[{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]]
-        } : {
-            inline_keyboard: [[{ text: "👨‍💻 Liên hệ Admin", url: "https://t.me/phamtheson" }]]
-        }
-    });
+    try {
+        await bot.sendMessage(chatId, text, {
+            parse_mode: 'Markdown',
+            reply_markup: isAdminUser ? {
+                inline_keyboard: [[{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]]
+            } : {
+                inline_keyboard: [[{ text: "👨‍💻 Liên hệ Admin", url: "https://t.me/phamtheson" }]]
+            }
+        });
+    } catch (e) {
+        console.error('❌ Error sending help message:', e.message);
+        bot.sendMessage(chatId, text.replace(/[*_`]/g, ''), {
+            reply_markup: isAdminUser ? {
+                inline_keyboard: [[{ text: "🖥️ Mở Admin Dashboard", url: DASHBOARD_URL }]]
+            } : {
+                inline_keyboard: [[{ text: "👨‍💻 Liên hệ Admin", url: "https://t.me/phamtheson" }]]
+            }
+        }).catch(() => {});
+    }
+}
+
+// /help - Hỗ trợ cả lệnh /help và các biến thể
+bot.onText(/^\/help(@\w+)?$/, async (msg) => {
+    await sendHelpMessage(msg.chat.id, msg.from?.id);
 });
 // /ping
 bot.onText(/^\/ping$/, async (msg) => {
@@ -1774,32 +1803,23 @@ async function getAIResponse(userMessage, userId) {
         }
         const history = conversationHistory.get(userId);
 
-        // Build system prompt
-        const systemPrompt = "Bạn là Nobita Bot, một trợ lý Telegram thân thiện, thông minh và vui tính. " +
-                            "Nhiệm vụ của bạn là hỗ trợ người dùng tải video/ảnh từ TikTok, Facebook, Instagram, YouTube... " +
-                            "Hãy trả lời bằng tiếng Việt, phong cách tự nhiên, sử dụng emoji phù hợp. " +
-                            "Nếu người dùng hỏi cách dùng, hãy hướng dẫn họ gửi link video. " +
-                            "Tránh trả lời quá dài dòng.";
-
-        // Prepend system prompt to the first user message if history is empty
-        let processedHistory = [...history];
-        const userMessageWithSystem = history.length === 0 
-            ? `${systemPrompt}\n\nNgười dùng nói: ${userMessage}`
-            : userMessage;
-
-        // Call Gemini API
+        // Call Gemini API with history
         const chat = geminiModel.startChat({
-            history: processedHistory,
+            history: history,
             generationConfig: {
-                maxOutputTokens: 250,
+                maxOutputTokens: 2048,
                 temperature: 0.8,
             },
         });
 
-        const result = await chat.sendMessage(userMessageWithSystem);
-        const aiMessage = result.response.text() || pickRandom(FALLBACK_RESPONSES);
+        // Get current time in Vietnam
+        const now = new Date().toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+        const userMessageWithContext = `[Thời gian hiện tại: ${now}]\n\n${userMessage}`;
+
+        const result = await chat.sendMessage(userMessageWithContext);
+        let aiMessage = result.response.text() || pickRandom(FALLBACK_RESPONSES);
         
-        // Add user and AI messages to history
+        // Add user and AI messages to history (store original user message without context)
         history.push({ role: 'user', parts: [{ text: userMessage }] });
         history.push({ role: 'model', parts: [{ text: aiMessage }] });
 
@@ -1811,6 +1831,10 @@ async function getAIResponse(userMessage, userId) {
         return aiMessage;
     } catch (error) {
         console.error('❌ AI Error:', error.message);
+        // If it's a safety error or quota error, provide a slightly better fallback
+        if (error.message.includes('SAFETY') || error.message.includes('blocked')) {
+            return "😊 Xin lỗi bạn, mình không thể trả lời câu hỏi này vì vi phạm chính sách an toàn. Bạn hỏi câu khác nhé!";
+        }
         return pickRandom(FALLBACK_RESPONSES);
     }
 }
@@ -1940,6 +1964,13 @@ bot.on('message', async (msg) => {
                 return;
             }
 
+            // Check for help keywords without slash
+            const lowText = text.toLowerCase().trim();
+            if (['help', 'hướng dẫn', 'tro giup', 'h', 'menu', 'trợ giúp'].includes(lowText)) {
+                await sendHelpMessage(chatId, userId);
+                return;
+            }
+
             // If not admin, notify admin of the message
             if (!isAdmin(userId) && ADMIN_USER_ID) {
                 const who = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
@@ -1955,10 +1986,19 @@ bot.on('message', async (msg) => {
             // Send AI response
             try {
                 const aiResponse = await getAIResponse(text, userId);
-                bot.sendMessage(chatId, aiResponse, { 
-                    parse_mode: 'Markdown', 
+                // Use HTML mode and simple conversion to avoid Markdown parse errors
+                const htmlResponse = aiResponse
+                    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                    .replace(/\*(.*?)\*/g, '<i>$1</i>')
+                    .replace(/`(.*?)`/g, '<code>$1</code>');
+                
+                bot.sendMessage(chatId, htmlResponse, { 
+                    parse_mode: 'HTML', 
                     reply_to_message_id: msg.message_id 
-                }).catch(e => console.error('Error sending AI response:', e.message));
+                }).catch(e => {
+                    // If HTML fails, send as plain text
+                    bot.sendMessage(chatId, aiResponse, { reply_to_message_id: msg.message_id });
+                });
             } catch (error) {
                 console.error('Error in AI chat:', error);
             }
