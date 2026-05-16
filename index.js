@@ -1991,7 +1991,9 @@ async function processQueue() {
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
-        if (!videoData || (!videoData.url && !videoData.isTooLarge && !videoData.isSlideshow)) throw new Error('Could not retrieve video URL');
+        if (!videoData || (!videoData.url && !videoData.localPath && !videoData.isSlideshow)) {
+            throw new Error('Could not retrieve media');
+        }
 
         if (videoData.isSlideshow) {
             const sid = Math.random().toString(36).slice(2, 10);
@@ -2023,14 +2025,34 @@ async function processQueue() {
 
         if (videoData.isAudio) {
             const audioSource = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
-            await bot.sendAudio(request.chatId, audioSource, {
-                caption: botSettings.captionText,
-                reply_to_message_id: request.messageId,
-                title: videoData.title
-            });
-            if (videoData.isLocal && videoData.localPath) {
-                fs.unlink(videoData.localPath, () => { });
+
+            if (videoData.isTooLarge) {
+                await bot.sendMessage(request.chatId,
+                    `⚠️ *Audio quá lớn (${videoData.sizeMB.toFixed(1)} MB)!*\n\nTelegram giới hạn ${botSettings.maxFileSizeMB}MB, nên bot không thể gửi file này.`,
+                    { parse_mode: 'Markdown', reply_to_message_id: request.messageId }
+                );
+                if (videoData.isLocal && videoData.localPath) {
+                    fs.unlink(videoData.localPath, () => { });
+                }
+                if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+                stats.failedDownloads++;
+                recordPlatformFailure(request.platform, `Audio quá lớn (${videoData.sizeMB.toFixed(1)} MB)`);
+                saveData();
+                return;
             }
+
+            try {
+                await bot.sendAudio(request.chatId, audioSource, {
+                    caption: botSettings.captionText,
+                    reply_to_message_id: request.messageId,
+                    title: videoData.title
+                });
+            } finally {
+                if (videoData.isLocal && videoData.localPath) {
+                    fs.unlink(videoData.localPath, () => { });
+                }
+            }
+
             if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
             stats.successfulDownloads++;
             dailyStats.downloads++;
@@ -2342,6 +2364,12 @@ async function normalizeFbUrl(fbUrl) {
 async function downloadSoundCloudAudio(url) {
     try {
         const youtubedl = getYtDlExec();
+
+        const tempPath = path.join(
+            __dirname,
+            `soundcloud_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`
+        );
+
         const info = await youtubedl(url, {
             dumpSingleJson: true,
             noWarnings: true,
@@ -2349,17 +2377,30 @@ async function downloadSoundCloudAudio(url) {
             addHeader: ['User-Agent:Mozilla/5.0']
         });
 
-        const format = info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none' && (f.vcodec === 'none' || !f.vcodec))
-            || info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none');
-        const audioUrl = format?.url || info.url;
-        if (!audioUrl) throw new Error('Không lấy được audio từ SoundCloud');
+        await youtubedl(url, {
+            extractAudio: true,
+            audioFormat: 'mp3',
+            audioQuality: '0',
+            output: tempPath,
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0']
+        });
 
-        const sizeInfo = await checkVideoSize(audioUrl);
+        if (!fs.existsSync(tempPath)) {
+            throw new Error('Không tải được file SoundCloud');
+        }
+
+        const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+
         return {
-            url: audioUrl,
-            title: info.title || 'SoundCloud Audio',
             isAudio: true,
-            ...sizeInfo
+            isLocal: true,
+            localPath: tempPath,
+            title: info.title || 'SoundCloud Audio',
+            sizeMB,
+            isTooLarge: sizeMB > botSettings.maxFileSizeMB
+
         };
     } catch (e) {
         throw new Error(e.message || 'SoundCloud download failed');
