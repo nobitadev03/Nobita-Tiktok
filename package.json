@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "build": "YOUTUBE_DL_SKIP_DOWNLOAD=true YT_DLP_SKIP_DOWNLOAD=true npm install && python3 -m pip install yt-dlp",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

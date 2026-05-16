@@ -2118,6 +2118,7 @@ async function processQueue() {
         handleComboMessage(request.chatId, request.userId);
         recordHistory(request.userId, request.url, request.platform);
         saveData();
+
         console.log(`[✅] ${request.platform} video sent to @${request.username}`);
         
         const platformInfo = PLATFORMS[request.platform];
@@ -2192,22 +2193,51 @@ async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 1000) {
     }
 }
 
-function getYtDlExec() {
+async function getYtDlExec() {
     let module = null;
     try {
         module = require('youtube-dl-exec');
+        // Simple check if binary is available
+        if (!fs.existsSync(module.exec)) throw new Error('Binary not found');
     } catch (e) {
-        if (e.code !== 'MODULE_NOT_FOUND') throw e;
+        module = null;
     }
+    
     if (!module) {
         try {
             module = require('yt-dlp-exec');
         } catch (e) {
-            if (e.code !== 'MODULE_NOT_FOUND') throw e;
+            module = null;
         }
     }
+
     if (!module) {
-        throw new Error('Module youtube-dl-exec hoặc yt-dlp-exec chưa được cài đặt');
+        // Fallback to system yt-dlp if available
+        const { execFile } = require('child_process');
+        const util = require('util');
+        const execFilePromise = util.promisify(execFile);
+        
+        console.log('⚠️ Using system yt-dlp fallback');
+        
+        // Return a function that matches the signature of youtube-dl-exec
+        return async (url, flags = {}) => {
+            const args = [];
+            for (const [key, value] of Object.entries(flags)) {
+                // youtube-dl-exec uses camelCase flags which map to --flag-name
+                const flag = key.replace(/[A-Z]/g, m => `-${m.toLowerCase()}`);
+                const prefix = flag.length === 1 ? '-' : '--';
+                if (value === true) args.push(`${prefix}${flag}`);
+                else if (value !== false) {
+                    args.push(`${prefix}${flag}`);
+                    args.push(String(value));
+                }
+            }
+            args.push(url);
+            
+            const { stdout } = await execFilePromise('yt-dlp', args);
+            if (flags.dumpSingleJson) return JSON.parse(stdout);
+            return stdout;
+        };
     }
     return module;
 }
