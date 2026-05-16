@@ -1774,28 +1774,39 @@ async function getAIResponse(userMessage, userId) {
         }
         const history = conversationHistory.get(userId);
 
-        // Add user message to history
-        history.push({ role: 'user', parts: [{ text: userMessage }] });
+        // Build system prompt
+        const systemPrompt = "Bạn là Nobita Bot, một trợ lý Telegram thân thiện, thông minh và vui tính. " +
+                            "Nhiệm vụ của bạn là hỗ trợ người dùng tải video/ảnh từ TikTok, Facebook, Instagram, YouTube... " +
+                            "Hãy trả lời bằng tiếng Việt, phong cách tự nhiên, sử dụng emoji phù hợp. " +
+                            "Nếu người dùng hỏi cách dùng, hãy hướng dẫn họ gửi link video. " +
+                            "Tránh trả lời quá dài dòng.";
 
-        // Keep only last MAX_HISTORY_MESSAGES
-        if (history.length > MAX_HISTORY_MESSAGES) {
-            history.shift();
-        }
+        // Prepend system prompt to the first user message if history is empty
+        let processedHistory = [...history];
+        const userMessageWithSystem = history.length === 0 
+            ? `${systemPrompt}\n\nNgười dùng nói: ${userMessage}`
+            : userMessage;
 
         // Call Gemini API
         const chat = geminiModel.startChat({
-            history: history.slice(0, -1), // History without the current message
+            history: processedHistory,
             generationConfig: {
-                maxOutputTokens: 150,
-                temperature: 0.7,
+                maxOutputTokens: 250,
+                temperature: 0.8,
             },
         });
 
-        const result = await chat.sendMessage(userMessage);
+        const result = await chat.sendMessage(userMessageWithSystem);
         const aiMessage = result.response.text() || pickRandom(FALLBACK_RESPONSES);
         
-        // Add AI response to history
+        // Add user and AI messages to history
+        history.push({ role: 'user', parts: [{ text: userMessage }] });
         history.push({ role: 'model', parts: [{ text: aiMessage }] });
+
+        // Keep only last MAX_HISTORY_MESSAGES
+        if (history.length > MAX_HISTORY_MESSAGES * 2) {
+            history.splice(0, 2);
+        }
 
         return aiMessage;
     } catch (error) {
@@ -1922,28 +1933,34 @@ bot.on('message', async (msg) => {
             } else {
                 bot.sendMessage(chatId, '❌ Không nhận diện được User ID.');
             }
-        } else if (!isAdmin(userId)) {
-            if (mutedUsers.has(userId)) {
+        } else {
+            // General chat (for both Admin and User)
+            if (!isAdmin(userId) && mutedUsers.has(userId)) {
                 bot.sendMessage(chatId, '🔇 Bạn đã bị khóa nhắn tin admin.').catch(() => { });
-            } else {
-                // Send message to admin
-                if (ADMIN_USER_ID) {
-                    const who = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
-                    bot.sendMessage(ADMIN_USER_ID,
-                        `📩 *Tin nhắn từ ${who}* (ID: \`${userId}\`):\n\n${text}`,
-                        { parse_mode: 'Markdown' }
-                    ).catch(() => { });
-                }
-                
-                // Send AI response to user
-                const typingIndicator = bot.sendChatAction(chatId, 'typing');
-                try {
-                    const aiResponse = await getAIResponse(text, userId);
-                    bot.sendMessage(chatId, aiResponse, { parse_mode: 'Markdown', reply_to_message_id: msg.message_id })
-                        .catch(e => console.error('Error sending AI response:', e.message));
-                } catch (error) {
-                    console.error('Error in AI chat:', error);
-                }
+                return;
+            }
+
+            // If not admin, notify admin of the message
+            if (!isAdmin(userId) && ADMIN_USER_ID) {
+                const who = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
+                bot.sendMessage(ADMIN_USER_ID,
+                    `📩 *Tin nhắn từ ${who}* (ID: \`${userId}\`):\n\n${text}`,
+                    { parse_mode: 'Markdown' }
+                ).catch(() => { });
+            }
+            
+            // Show typing indicator
+            bot.sendChatAction(chatId, 'typing').catch(() => {});
+            
+            // Send AI response
+            try {
+                const aiResponse = await getAIResponse(text, userId);
+                bot.sendMessage(chatId, aiResponse, { 
+                    parse_mode: 'Markdown', 
+                    reply_to_message_id: msg.message_id 
+                }).catch(e => console.error('Error sending AI response:', e.message));
+            } catch (error) {
+                console.error('Error in AI chat:', error);
             }
         }
     }
@@ -2256,9 +2273,9 @@ async function checkVideoSize(url) {
 }
 
 async function normalizeUrl(url) {
-    if (/vm\.|vt\.|v\./.test(url)) {
+    if (/(?:vm|vt|v|t)\.tiktok\.com/.test(url) || /douyin\.com\/share/.test(url) || /fb\.watch/.test(url)) {
         try {
-            const r = await axios.get(url, { maxRedirects: 5, timeout: 10000, validateStatus: () => true });
+            const r = await axios.get(url, { maxRedirects: 5, timeout: 10000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0' } });
             return r.request?.res?.responseUrl || url;
         } catch { return url; }
     }
@@ -2345,38 +2362,61 @@ async function getVideoNoWatermark(url) {
 // 🎵 TikTok Photo Detection & Download
 // ============================================================
 function isTikTokPhotoUrl(url) {
-    // Check if URL contains /photo/ pattern
-    return /\/photo\/\d+|modal_id=\d+/.test(url);
+    // Check if URL contains /photo/ pattern or is a known slideshow/image post
+    return /\/(?:photo|image|note)\/\d+|modal_id=\d+|item_id=\d+/.test(url);
 }
 
 async function downloadTikTokPhoto(url) {
-    // Use the same tikwm API but it will handle both video and photo
     const normalizedUrl = await normalizeUrl(url);
     
-    try {
-        // Try tikwm API which returns images for photo/slideshow posts
-        const res = await axios.post('https://www.tikwm.com/api/', { url: normalizedUrl, hd: 1 }, {
-            timeout: 15000, 
-            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
-        });
-        
-        if (res.data?.code === 0) {
-            const d = res.data.data;
-            if (d.images && d.images.length > 0) {
+    // Attempt with multiple strategies
+    const strategies = [
+        // Strategy 1: TikWM API (Most reliable for photos)
+        async () => {
+            const res = await axios.post('https://www.tikwm.com/api/', { url: normalizedUrl, hd: 1 }, {
+                timeout: 15000, 
+                headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.code === 0 && res.data.data?.images?.length > 0) {
+                const d = res.data.data;
                 return { 
-                    isSlideshow: true, 
-                    images: d.images, 
-                    music: d.music, 
-                    title: d.title || 'TikTok Photo/Album',
-                    imageCount: d.images.length
+                    isSlideshow: true, images: d.images, music: d.music, 
+                    title: d.title || 'TikTok Photo/Album', imageCount: d.images.length 
                 };
             }
+            throw new Error('TikWM no photos');
+        },
+        // Strategy 2: TikWM via GET (fallback)
+        async () => {
+            const res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(normalizedUrl)}&hd=1`, {
+                timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.code === 0 && res.data.data?.images?.length > 0) {
+                const d = res.data.data;
+                return { 
+                    isSlideshow: true, images: d.images, music: d.music, 
+                    title: d.title || 'TikTok Photo/Album', imageCount: d.images.length 
+                };
+            }
+            throw new Error('TikWM GET no photos');
+        },
+        // Strategy 3: Try getVideoNoWatermark logic which also handles slideshows
+        async () => {
+            const result = await getVideoNoWatermark(url);
+            if (result && result.isSlideshow) return result;
+            throw new Error('getVideoNoWatermark no photos');
         }
-        throw new Error('tikwm failed to get photos');
-    } catch (e) {
-        console.log('TikTok photo download failed:', e.message);
-        return null;
+    ];
+
+    for (const strategy of strategies) {
+        try {
+            const result = await strategy();
+            if (result) return result;
+        } catch (e) {
+            console.log(`TikTok photo strategy failed: ${e.message}`);
+        }
     }
+    return null;
 }
 
 // 🐙 Facebook
