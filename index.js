@@ -8,6 +8,23 @@ const EventEmitter = require('events');
 const os = require('os');
 const activityEmitter = new EventEmitter();
 
+// Setup AI (Google Gemini)
+let gemini = null;
+let geminiModel = null;
+try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (geminiApiKey) {
+        gemini = new GoogleGenerativeAI(geminiApiKey);
+        geminiModel = gemini.getGenerativeModel({ model: 'gemini-pro' });
+        console.log('✅ Google Gemini AI initialized');
+    } else {
+        console.warn('⚠️ GEMINI_API_KEY not found, AI chat will use fallback responses');
+    }
+} catch (e) {
+    console.warn('⚠️ Gemini SDK not installed or error:', e.message);
+}
+
 // Setup FFmpeg path
 try {
     const ffmpeg = require('@ffmpeg-installer/ffmpeg');
@@ -736,7 +753,7 @@ let userCombos = new Map();
 // 🔤 REGEX PATTERNS - Expanded Platform Support
 // ============================================================
 const PLATFORMS = {
-    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/video\/\d+|video\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/video\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok/Douyin' },
+    tiktok: { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/(?:video|photo)\/\d+|(?:video|photo)\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/(?:video|photo)\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok/Douyin' },
     facebook: { regex: /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i, emoji: '🐙', name: 'Facebook' },
     youtube: { regex: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]+/i, emoji: '▶️', name: 'YouTube' },
     instagram: { regex: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p)\/[\w-]+/i, emoji: '📸', name: 'Instagram' },
@@ -745,6 +762,7 @@ const PLATFORMS = {
     snapchat: { regex: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/(?:spotlight|add|discover)\/[\w-]+/i, emoji: '👻', name: 'Snapchat' },
     reddit: { regex: /(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/i, emoji: '🤖', name: 'Reddit' },
     bilibili: { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
+    soundcloud: { regex: /(?:https?:\/\/)?(?:(?:www|on)\.)?soundcloud\.com\/(?:[\w-]+\/[\w-]+|[\w-]+)/i, emoji: '🎧', name: 'SoundCloud' },
 };
 
 function detectPlatform(text) {
@@ -1649,7 +1667,163 @@ bot.on('callback_query', async (query) => {
 });
 
 // ============================================================
-// 📨 MAIN MESSAGE HANDLER
+// � AUTO-CONVERSATION FEATURE
+// ============================================================
+
+// Conversation templates for natural bot-user interaction
+const CONVERSATION_MESSAGES = [
+    '👋 Chào bạn! Bạn khỏe không? Mình vừa cập nhật tính năng tải ảnh TikTok rồi đó!',
+    '😊 Hôm nay bạn tìm thấy video hay không? Gửi cho mình xem nhé!',
+    '🤔 Bạn có biết mình có thể tải video từ nhiều nền tảng không? TikTok, Instagram, Facebook, YouTube, v.v...',
+    '🎉 Cảm ơn bạn vì đã tin tưởng mình! Bot đang hoạt động 24/7 để phục vụ bạn.',
+    '💡 Mẹo: Bạn có thể gửi link video TikTok, Instagram hay Facebook trực tiếp cho mình!',
+    '🌟 Bạn đã biết bot mình có thể tải nhạc từ video không? Chỉ cần gửi link là xong!',
+    '🎬 Có link video nào hay không? Mình sẽ giúp bạn tải ngay!',
+    '✨ Chào bạn! Mình là Nobita Bot - bot tải video không watermark tốt nhất! 🤖',
+    '📱 Hôm nay bạn thấy video TikTok nào đẹp không? Chia sẻ cho mình xem với!',
+    '🎵 Nếu bạn có video hay muốn tải nhạc, hãy gửi link cho mình nhé!',
+    '👉 Psst... bạn có thể tải ảnh từ TikTok bây giờ! Thử xem nào!',
+    '🚀 Nobita Bot vừa được nâng cấp với tính năng tải ảnh TikTok cực hay!',
+    '😄 Hôm nay bạn khỏe không? Mình đây, sẵn sàng giúp bạn tải video!',
+    '💬 Bạn muốn nói gì với mình không? Hoặc bạn có video cần tải?',
+    '🎯 Mục tiêu của mình là giúp bạn tải video nhanh chóng và dễ dàng!',
+];
+
+// Function to send random conversation message to a user
+async function sendConversationMessage(userId) {
+    try {
+        // Check if user exists in active users
+        if (!stats.activeUsers.has(userId)) return;
+        
+        // Don't message banned or muted users
+        if (bannedUsers.has(userId) || mutedUsers.has(userId)) return;
+        
+        const message = pickRandom(CONVERSATION_MESSAGES);
+        await bot.sendMessage(userId, message, { parse_mode: 'Markdown' }).catch(e => {
+            // Silently ignore if user has blocked or deleted bot
+            console.log(`Could not send message to ${userId}: ${e.message}`);
+        });
+    } catch (e) {
+        console.log(`Error sending conversation to ${userId}: ${e.message}`);
+    }
+}
+
+// Send random conversation messages to active users periodically
+// Configuration: every 2-3 hours to a random set of active users
+const AUTO_CHAT_INTERVAL = process.env.AUTO_CHAT_INTERVAL || 120 * 60 * 1000; // 2 hours default
+const AUTO_CHAT_ENABLED = process.env.AUTO_CHAT_ENABLED !== 'false'; // Enabled by default
+
+if (AUTO_CHAT_ENABLED) {
+    setInterval(async () => {
+        const activeUsers = Array.from(stats.activeUsers.keys());
+        if (activeUsers.length === 0) return;
+        
+        // Send to 1-5 random users
+        const numUsers = Math.min(Math.floor(Math.random() * 5) + 1, activeUsers.length);
+        const selectedUsers = [];
+        
+        for (let i = 0; i < numUsers; i++) {
+            const randomIdx = Math.floor(Math.random() * activeUsers.length);
+            selectedUsers.push(activeUsers[randomIdx]);
+        }
+        
+        console.log(`📬 Sending auto-conversation to ${selectedUsers.length} users...`);
+        for (const uid of selectedUsers) {
+            await sendConversationMessage(uid);
+            await sleep(1000); // 1 second delay between messages
+        }
+    }, AUTO_CHAT_INTERVAL);
+    console.log(`✅ Auto-conversation feature enabled (interval: ${AUTO_CHAT_INTERVAL / 60000} minutes)`);
+}
+
+// ============================================================
+// 🤖 AI CHATBOT SERVICE
+// ============================================================
+
+// Store conversation history per user (max 10 messages per user)
+const conversationHistory = new Map();
+const MAX_HISTORY_MESSAGES = 10;
+
+// Fallback responses if AI is not available
+const FALLBACK_RESPONSES = [
+    '😄 Bạn nói thế à? Mình thích nói chuyện với bạn!',
+    '👍 Nghe vô cùng hay! Bạn còn có gì để chia sẻ không?',
+    '🤔 Thú vị đấy! Bạn muốn tải video nào không?',
+    '💬 Cảm ơn bạn đã nói chuyện với mình!',
+    '😊 Mình rất vui khi được trò chuyện với bạn!',
+    '🎉 Bạn tuyệt vời! Còn gì khác mình có thể giúp không?',
+    '👋 Chào bạn! Mình luôn sẵn sàng để trò chuyện!',
+    '💡 Bạn có ý tưởng gì cho mình không?',
+    '🌟 Bạn là người bạn tuyệt vời của mình!',
+    '🎬 Vậy thì bạn có video hay để chia sẻ không?',
+];
+
+/**
+ * Get AI response using Google Gemini
+ */
+async function getAIResponse(userMessage, userId) {
+    try {
+        // If no Gemini, use fallback
+        if (!geminiModel) {
+            return pickRandom(FALLBACK_RESPONSES);
+        }
+
+        // Get or create conversation history for this user
+        if (!conversationHistory.has(userId)) {
+            conversationHistory.set(userId, []);
+        }
+        const history = conversationHistory.get(userId);
+
+        // Add user message to history
+        history.push({ role: 'user', parts: [{ text: userMessage }] });
+
+        // Keep only last MAX_HISTORY_MESSAGES
+        if (history.length > MAX_HISTORY_MESSAGES) {
+            history.shift();
+        }
+
+        // Call Gemini API
+        const chat = geminiModel.startChat({
+            history: history.slice(0, -1), // History without the current message
+            generationConfig: {
+                maxOutputTokens: 150,
+                temperature: 0.7,
+            },
+        });
+
+        const result = await chat.sendMessage(userMessage);
+        const aiMessage = result.response.text() || pickRandom(FALLBACK_RESPONSES);
+        
+        // Add AI response to history
+        history.push({ role: 'model', parts: [{ text: aiMessage }] });
+
+        return aiMessage;
+    } catch (error) {
+        console.error('❌ AI Error:', error.message);
+        return pickRandom(FALLBACK_RESPONSES);
+    }
+}
+
+/**
+ * Clear conversation history for a user
+ */
+function clearConversationHistory(userId) {
+    conversationHistory.delete(userId);
+}
+
+// Cleanup old conversations periodically (every 1 hour)
+setInterval(() => {
+    // Keep only conversations from last 100 users to prevent memory issues
+    if (conversationHistory.size > 100) {
+        const allKeys = Array.from(conversationHistory.keys());
+        const keysToDelete = allKeys.slice(0, allKeys.length - 100);
+        keysToDelete.forEach(key => conversationHistory.delete(key));
+        console.log(`🧹 Cleared old conversations, kept last 100 users`);
+    }
+}, 60 * 60 * 1000); // 1 hour
+
+// ============================================================
+// �📨 MAIN MESSAGE HANDLER
 // ============================================================
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
@@ -1751,12 +1925,25 @@ bot.on('message', async (msg) => {
         } else if (!isAdmin(userId)) {
             if (mutedUsers.has(userId)) {
                 bot.sendMessage(chatId, '🔇 Bạn đã bị khóa nhắn tin admin.').catch(() => { });
-            } else if (ADMIN_USER_ID) {
-                const who = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
-                bot.sendMessage(ADMIN_USER_ID,
-                    `📩 *Tin nhắn từ ${who}* (ID: \`${userId}\`):\n\n${text}`,
-                    { parse_mode: 'Markdown' }
-                ).catch(() => { });
+            } else {
+                // Send message to admin
+                if (ADMIN_USER_ID) {
+                    const who = msg.from?.username ? `@${msg.from.username}` : msg.from?.first_name || 'user';
+                    bot.sendMessage(ADMIN_USER_ID,
+                        `📩 *Tin nhắn từ ${who}* (ID: \`${userId}\`):\n\n${text}`,
+                        { parse_mode: 'Markdown' }
+                    ).catch(() => { });
+                }
+                
+                // Send AI response to user
+                const typingIndicator = bot.sendChatAction(chatId, 'typing');
+                try {
+                    const aiResponse = await getAIResponse(text, userId);
+                    bot.sendMessage(chatId, aiResponse, { parse_mode: 'Markdown', reply_to_message_id: msg.message_id })
+                        .catch(e => console.error('Error sending AI response:', e.message));
+                } catch (error) {
+                    console.error('Error in AI chat:', error);
+                }
             }
         }
     }
@@ -1784,6 +1971,14 @@ async function processQueue() {
 
         let videoData;
         switch (request.platform) {
+            case 'tiktok': 
+                // Check if it's a photo URL
+                if (isTikTokPhotoUrl(request.url)) {
+                    videoData = await downloadTikTokPhoto(request.url);
+                } else {
+                    videoData = await getVideoNoWatermark(request.url);
+                }
+                break;
             case 'facebook': videoData = await downloadFacebookVideo(request.url); break;
             case 'youtube': videoData = await downloadYouTubeVideo(request.url); break;
             case 'instagram': videoData = await downloadInstagramVideo(request.url); break;
@@ -1792,6 +1987,7 @@ async function processQueue() {
             case 'reddit': videoData = await downloadRedditVideo(request.url); break;
             case 'bilibili': videoData = await downloadBilibiliVideo(request.url); break;
             case 'snapchat': videoData = await downloadSnapchatVideo(request.url); break;
+            case 'soundcloud': videoData = await downloadSoundCloudAudio(request.url); break;
             default: videoData = await getVideoNoWatermark(request.url); break;
         }
 
@@ -1822,6 +2018,30 @@ async function processQueue() {
             maybeSendFun(request.chatId, pickRandom(FUN.successLines));
             handleComboMessage(request.chatId, request.userId);
             saveData();
+            return;
+        }
+
+        if (videoData.isAudio) {
+            const audioSource = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
+            await bot.sendAudio(request.chatId, audioSource, {
+                caption: botSettings.captionText,
+                reply_to_message_id: request.messageId,
+                title: videoData.title
+            });
+            if (videoData.isLocal && videoData.localPath) {
+                fs.unlink(videoData.localPath, () => { });
+            }
+            if (processingMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(request.chatId, processingMsg.message_id).catch(() => { });
+            stats.successfulDownloads++;
+            dailyStats.downloads++;
+            recordPlatformSuccess(request.platform);
+            maybeSendFun(request.chatId, pickRandom(FUN.successLines));
+            handleComboMessage(request.chatId, request.userId);
+            recordHistory(request.userId, request.url, request.platform);
+            saveData();
+            console.log(`[✅] ${request.platform} audio sent to @${request.username}`);
+            const platformInfo = PLATFORMS[request.platform];
+            addActivityLog('ok', `✅ Tải xong ${platformInfo ? platformInfo.name : 'audio'} cho @${request.username} (ID: ${request.userId})`);
             return;
         }
 
@@ -1950,6 +2170,26 @@ async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 1000) {
     }
 }
 
+function getYtDlExec() {
+    let module = null;
+    try {
+        module = require('youtube-dl-exec');
+    } catch (e) {
+        if (e.code !== 'MODULE_NOT_FOUND') throw e;
+    }
+    if (!module) {
+        try {
+            module = require('yt-dlp-exec');
+        } catch (e) {
+            if (e.code !== 'MODULE_NOT_FOUND') throw e;
+        }
+    }
+    if (!module) {
+        throw new Error('Module youtube-dl-exec hoặc yt-dlp-exec chưa được cài đặt');
+    }
+    return module;
+}
+
 async function checkVideoSize(url) {
     try {
         const r = await axios.head(url, { timeout: 10000, maxRedirects: 5 });
@@ -2049,6 +2289,44 @@ async function getVideoNoWatermark(url) {
     return null;
 }
 
+// ============================================================
+// 🎵 TikTok Photo Detection & Download
+// ============================================================
+function isTikTokPhotoUrl(url) {
+    // Check if URL contains /photo/ pattern
+    return /\/photo\/\d+|modal_id=\d+/.test(url);
+}
+
+async function downloadTikTokPhoto(url) {
+    // Use the same tikwm API but it will handle both video and photo
+    const normalizedUrl = await normalizeUrl(url);
+    
+    try {
+        // Try tikwm API which returns images for photo/slideshow posts
+        const res = await axios.post('https://www.tikwm.com/api/', { url: normalizedUrl, hd: 1 }, {
+            timeout: 15000, 
+            headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        if (res.data?.code === 0) {
+            const d = res.data.data;
+            if (d.images && d.images.length > 0) {
+                return { 
+                    isSlideshow: true, 
+                    images: d.images, 
+                    music: d.music, 
+                    title: d.title || 'TikTok Photo/Album',
+                    imageCount: d.images.length
+                };
+            }
+        }
+        throw new Error('tikwm failed to get photos');
+    } catch (e) {
+        console.log('TikTok photo download failed:', e.message);
+        return null;
+    }
+}
+
 // 🐙 Facebook
 async function normalizeFbUrl(fbUrl) {
     if (fbUrl.includes('/share/') || fbUrl.includes('fb.watch')) {
@@ -2061,12 +2339,39 @@ async function normalizeFbUrl(fbUrl) {
     return fbUrl;
 }
 
+async function downloadSoundCloudAudio(url) {
+    try {
+        const youtubedl = getYtDlExec();
+        const info = await youtubedl(url, {
+            dumpSingleJson: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            addHeader: ['User-Agent:Mozilla/5.0']
+        });
+
+        const format = info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none' && (f.vcodec === 'none' || !f.vcodec))
+            || info.formats?.slice().reverse().find(f => f.acodec && f.acodec !== 'none');
+        const audioUrl = format?.url || info.url;
+        if (!audioUrl) throw new Error('Không lấy được audio từ SoundCloud');
+
+        const sizeInfo = await checkVideoSize(audioUrl);
+        return {
+            url: audioUrl,
+            title: info.title || 'SoundCloud Audio',
+            isAudio: true,
+            ...sizeInfo
+        };
+    } catch (e) {
+        throw new Error(e.message || 'SoundCloud download failed');
+    }
+}
+
 async function downloadFacebookVideo(fbUrl) {
     const realUrl = await normalizeFbUrl(fbUrl);
 
     const apis = [
         async () => {
-            const youtubedl = require('youtube-dl-exec');
+            const youtubedl = getYtDlExec();
             const info = await youtubedl(realUrl, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
             let format = info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none' && f.ext === 'mp4')
                 || info.formats?.slice().reverse().find(f => f.vcodec !== 'none' && f.acodec !== 'none');
@@ -2151,7 +2456,7 @@ async function downloadFacebookVideo(fbUrl) {
 // ▶️ YouTube
 async function downloadYouTubeVideo(url) {
     try {
-        const youtubedl = require('youtube-dl-exec');
+        const youtubedl = getYtDlExec();
         const tempPath = path.join(__dirname, `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
         
         // 1. First get info to check duration
