@@ -195,7 +195,7 @@ const PLATFORMS = {
     bilibili:   { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
     soundcloud: { regex: /(?:https?:\/\/)?(?:(?:www|on)\.)?soundcloud\.com\/(?:[\w-]+\/[\w-]+|[\w-]+)/i, emoji: '🎧', name: 'SoundCloud' },
 };
-
+initPlatformStats();
 function detectPlatform(text) {
     for (const [key, p] of Object.entries(PLATFORMS)) {
         const m = text.match(p.regex);
@@ -210,7 +210,7 @@ function initPlatformStats() {
             platformStats[key] = { ok: 0, fail: 0, lastOk: 0, lastFail: 0, lastError: '' };
     }
 }
-initPlatformStats();
+
 function recordPlatformSuccess(key) {
     if (!platformStats[key]) platformStats[key] = { ok: 0, fail: 0, lastOk: 0, lastFail: 0, lastError: '' };
     platformStats[key].ok++;
