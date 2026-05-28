@@ -179,7 +179,6 @@ function saveData() {
 }
 
 loadData();
-initPlatformStats();
 
 // ============================================================
 // 🌐 PLATFORMS
@@ -211,7 +210,7 @@ function initPlatformStats() {
             platformStats[key] = { ok: 0, fail: 0, lastOk: 0, lastFail: 0, lastError: '' };
     }
 }
-
+initPlatformStats();
 function recordPlatformSuccess(key) {
     if (!platformStats[key]) platformStats[key] = { ok: 0, fail: 0, lastOk: 0, lastFail: 0, lastError: '' };
     platformStats[key].ok++;
