@@ -1,11 +1,11 @@
 require('dotenv').config();
-const TelegramBot = require('node-telegram-bot-api');
-const axios       = require('axios');
-const fs          = require('fs');
-const path        = require('path');
-const express     = require('express');
-const EventEmitter= require('events');
-const os          = require('os');
+const TelegramBot  = require('node-telegram-bot-api');
+const axios        = require('axios');
+const fs           = require('fs');
+const path         = require('path');
+const express      = require('express');
+const EventEmitter = require('events');
+const os           = require('os');
 
 const activityEmitter = new EventEmitter();
 activityEmitter.setMaxListeners(50);
@@ -83,7 +83,11 @@ try {
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) { console.error('❌ TELEGRAM_BOT_TOKEN is not defined'); process.exit(1); }
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, {
+    polling: true,
+    // Tăng timeout để gửi file nặng
+    request: { timeout: 300000 },
+});
 
 // ============================================================
 // 📋 CONFIGURATION
@@ -96,8 +100,10 @@ const DASHBOARD_URL   = `${BOT_URL}/dashboard?token=${DASHBOARD_TOKEN}`;
 const BOT_VERSION     = '4.2';
 const BOT_START_TIME  = Date.now();
 
-// Giới hạn upload Bot API (~19MB an toàn)
-const BOT_UPLOAD_LIMIT_MB = 19;
+// Telegram giới hạn upload 50MB (Bot API), dùng sendDocument bypass cho audio nặng
+const TG_MAX_UPLOAD_MB   = 50;
+// Nếu file lớn hơn ngưỡng này sẽ dùng sendDocument thay vì sendAudio/sendVideo
+const LARGE_FILE_THRESHOLD_MB = 45;
 
 // ============================================================
 // 💾 PERSISTENT DATA
@@ -131,7 +137,7 @@ const SCHEDULE_POLL       = 5000;
 const MAX_AI_HISTORY      = 10;
 
 let botSettings = {
-    maxFileSizeMB:        49,
+    maxFileSizeMB:        2000,   // Tăng lên 2GB — giới hạn thực tế do Telegram Bot API (50MB)
     rateLimitWindow:      10000,
     defaultRateLimit:     3,
     captionText:          '┏━━━━━━━━━━━━━━━━━━┓\n┃  🎬 NOBITA DOWNLOADER \n┗━━━━━━━━━━━━━━━━━━┛\n\n👤 Admin: @phamtheson\n⭐ Powered by Nobita Bot v4.2',
@@ -142,6 +148,7 @@ let botSettings = {
     mp3Button:            true,
     funMode:              true,
     funChance:            0.3,
+    sendLargeAsDocument:  true,   // Gửi file lớn dưới dạng Document thay vì từ chối
 };
 
 // ============================================================
@@ -218,17 +225,19 @@ loadData();
 // 🌐 PLATFORMS
 // ============================================================
 const PLATFORMS = {
-    tiktok:        { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/(?:video|photo)\/\d+|(?:video|photo)\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/(?:video|photo)\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok' },
-    facebook:      { regex: /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|share\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i, emoji: '🐙', name: 'Facebook' },
-    youtube:       { regex: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)[\w-]+/i, emoji: '▶️', name: 'YouTube' },
-    instagram:     { regex: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p)\/[\w-]+/i, emoji: '📸', name: 'Instagram' },
-    twitter:       { regex: /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/[\w]+\/status\/[\d]+/i, emoji: '🐦', name: 'Twitter/X' },
-    pinterest:     { regex: /(?:https?:\/\/)?(?:(?:www|in|co)\.)?pinterest\.[a-z.]{2,10}\/pin\/[\d]+|(?:https?:\/\/)?pin\.it\/[\w]+/i, emoji: '📌', name: 'Pinterest' },
-    snapchat:      { regex: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/(?:spotlight|add|discover)\/[\w-]+/i, emoji: '👻', name: 'Snapchat' },
-    reddit:        { regex: /(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/i, emoji: '🤖', name: 'Reddit' },
-    bilibili:      { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
-    soundcloud:    { regex: /(?:https?:\/\/)?(?:(?:www|on)\.)?soundcloud\.com\/(?:[\w-]+\/[\w-]+|[\w-]+)/i, emoji: '🎧', name: 'SoundCloud' },
-    telegram_media:{ regex: /https?:\/\/t\.me\/(?:c\/\d+|[a-zA-Z0-9_]+)\/\d+/i, emoji: '✈️', name: 'Telegram' },
+    tiktok:         { regex: /(?:https?:\/\/)?(?:(?:www|vt|vm|m|t|v)\.)?(?:tiktok\.com|douyin\.com)\/(?:@[\w.-]+\/(?:video|photo)\/\d+|(?:video|photo)\/\d+|v\/\d+|[\w-]+(?:\/[\w-]+)*(?:\?[^\s]*modal_id=\d+[^\s]*)?|share\/(?:video|photo)\/\d+)|(?:https?:\/\/)?(?:vm|vt|v)\.(?:tiktok\.com|douyin\.com)\/[\w]+/i, emoji: '🎵', name: 'TikTok' },
+    facebook:       { regex: /(?:https?:\/\/)?(?:www\.|m\.|web\.)?(?:facebook\.com|fb\.com)\/(?:[\w.-]+\/videos\/[\d]+|watch[\/?].*v=[\d]+|video\.php\?v=[\d]+|reel\/[\w]+|share\/v\/[\w]+|share\/r\/[\w]+|share\/[\w]+|[\w.-]+\/posts\/[\w]+)|(?:https?:\/\/)?fb\.watch\/[\w]+/i, emoji: '🐙', name: 'Facebook' },
+    youtube:        { regex: /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:shorts\/|watch\?v=|embed\/|v\/)|youtu\.be\/)[\w-]+(?:\?[^\s]*)?/i, emoji: '▶️', name: 'YouTube' },
+    instagram:      { regex: /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:reel|p|tv)\/[\w-]+/i, emoji: '📸', name: 'Instagram' },
+    twitter:        { regex: /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/[\w]+\/status\/[\d]+/i, emoji: '🐦', name: 'Twitter/X' },
+    pinterest:      { regex: /(?:https?:\/\/)?(?:(?:www|in|co)\.)?pinterest\.[a-z.]{2,10}\/pin\/[\d]+|(?:https?:\/\/)?pin\.it\/[\w]+/i, emoji: '📌', name: 'Pinterest' },
+    snapchat:       { regex: /(?:https?:\/\/)?(?:www\.)?snapchat\.com\/(?:spotlight|add|discover)\/[\w-]+/i, emoji: '👻', name: 'Snapchat' },
+    reddit:         { regex: /(?:https?:\/\/)?(?:www\.|old\.)?reddit\.com\/r\/[\w]+\/comments\/[\w]+/i, emoji: '🤖', name: 'Reddit' },
+    bilibili:       { regex: /(?:https?:\/\/)?(?:www\.)?bilibili\.com\/video\/(BV[\w]+|av[\d]+)/i, emoji: '📺', name: 'Bilibili' },
+    soundcloud:     { regex: /(?:https?:\/\/)?(?:(?:www|on)\.)?soundcloud\.com\/(?:[\w-]+\/[\w-]+|[\w-]+)/i, emoji: '🎧', name: 'SoundCloud' },
+    vimeo:          { regex: /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:video\/)?[\d]+/i, emoji: '🎞️', name: 'Vimeo' },
+    dailymotion:    { regex: /(?:https?:\/\/)?(?:www\.)?dailymotion\.com\/video\/[\w]+/i, emoji: '📹', name: 'Dailymotion' },
+    telegram_media: { regex: /https?:\/\/t\.me\/(?:c\/\d+|[a-zA-Z0-9_]+)\/\d+/i, emoji: '✈️', name: 'Telegram' },
 };
 
 function initPlatformStats() {
@@ -287,11 +296,6 @@ function formatUptime(ms) {
     if (d > 0) return `${d}d ${h % 24}h`;
     if (h > 0) return `${h}h ${m % 60}m`;
     return `${m}m ${s % 60}s`;
-}
-
-function formatFileSize(mb) {
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-    return `${mb.toFixed(1)} MB`;
 }
 
 function pickRandom(arr) {
@@ -514,12 +518,14 @@ let processingCount = 0;
 // ============================================================
 // 📥 DOWNLOAD HELPERS
 // ============================================================
+const sleep2 = ms => new Promise(r => setTimeout(r, ms));
+
 async function retryWithBackoff(fn, maxRetries = 2, baseDelay = 800) {
     for (let i = 0; i < maxRetries; i++) {
         try { return await fn(); }
         catch (e) {
             if (i === maxRetries - 1) throw e;
-            await sleep(baseDelay * Math.pow(2, i));
+            await sleep2(baseDelay * Math.pow(2, i));
         }
     }
 }
@@ -540,10 +546,30 @@ async function getYtDlExec() {
             else if (v !== false) { args.push(`${prefix}${flag}`); args.push(String(v)); }
         }
         args.push(url);
-        const { stdout } = await execFileAsync('yt-dlp', args);
+        const { stdout } = await execFileAsync('yt-dlp', args, { maxBuffer: 100 * 1024 * 1024 });
         if (flags.dumpSingleJson) return JSON.parse(stdout);
         return stdout;
     };
+}
+
+// Lấy đường dẫn yt-dlp thực tế
+async function getYtDlpPath() {
+    const { execFile } = require('child_process');
+    const { promisify } = require('util');
+    const execFileAsync = promisify(execFile);
+    for (const bin of ['yt-dlp', 'yt-dlp-exec']) {
+        try {
+            const pkg = require(bin);
+            if (typeof pkg === 'string') return pkg;
+            if (pkg?.path) return pkg.path;
+        } catch (_) {}
+    }
+    // Fallback: tìm trong PATH
+    try {
+        const { stdout } = await execFileAsync('which', ['yt-dlp']);
+        return stdout.trim();
+    } catch (_) {}
+    return 'yt-dlp';
 }
 
 async function checkVideoSize(url) {
@@ -555,7 +581,7 @@ async function checkVideoSize(url) {
         });
         const size   = parseInt(res.headers['content-length'] || '0') || 0;
         const sizeMB = size / 1024 / 1024;
-        return { sizeMB, isTooLarge: sizeMB > botSettings.maxFileSizeMB && sizeMB > 0 };
+        return { sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB && sizeMB > 0 };
     } catch (_) {
         return { sizeMB: 0, isTooLarge: false };
     }
@@ -578,6 +604,62 @@ function normalizeDouyinUrl(url) {
     return url;
 }
 
+// ─── Gửi file thông minh: tự chọn sendAudio / sendVideo / sendDocument ────
+async function smartSendFile(chatId, filePath, opts = {}) {
+    const sizeMB = fs.existsSync(filePath) ? fs.statSync(filePath).size / 1024 / 1024 : 0;
+    const { isAudio, isVideo, isImage, caption, reply_to_message_id, title, filename } = opts;
+
+    // Nếu file > 50MB → Telegram sẽ từ chối, gửi dưới dạng Document cũng không được qua Bot API
+    // Trả về lỗi để handler gửi link thay thế
+    if (sizeMB > TG_MAX_UPLOAD_MB) {
+        throw Object.assign(new Error(`FILE_TOO_LARGE:${sizeMB.toFixed(1)}`), { sizeMB });
+    }
+
+    const baseOpts = { caption, reply_to_message_id };
+
+    if (isImage) {
+        return bot.sendPhoto(chatId, filePath, baseOpts);
+    }
+    if (isAudio) {
+        try {
+            return await bot.sendAudio(chatId, filePath, { ...baseOpts, title: title || 'Audio', supports_streaming: true });
+        } catch (e) {
+            // Fallback: gửi dưới dạng Document nếu sendAudio thất bại
+            console.warn('[smartSendFile] sendAudio failed, fallback to sendDocument:', e.message);
+            return bot.sendDocument(chatId, filePath, {
+                ...baseOpts,
+                caption: `🎵 ${title || 'Audio'}\n\n${caption || ''}`.trim(),
+            });
+        }
+    }
+    if (isVideo) {
+        try {
+            return await bot.sendVideo(chatId, filePath, { ...baseOpts, supports_streaming: true });
+        } catch (e) {
+            console.warn('[smartSendFile] sendVideo failed, fallback to sendDocument:', e.message);
+            return bot.sendDocument(chatId, filePath, baseOpts);
+        }
+    }
+    return bot.sendDocument(chatId, filePath, baseOpts);
+}
+
+// ─── Tải stream về file local ──────────────────────────────────────────────
+async function downloadToFile(url, destPath, extraHeaders = {}) {
+    const writer = fs.createWriteStream(destPath);
+    const res    = await axios.get(url, {
+        responseType: 'stream',
+        timeout:      180000,
+        headers:      { 'User-Agent': 'Mozilla/5.0', ...extraHeaders },
+        maxContentLength: Infinity,
+        maxBodyLength:    Infinity,
+    });
+    res.data.pipe(writer);
+    return new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error',  reject);
+    });
+}
+
 // ============================================================
 // 🐙 FACEBOOK DOWNLOADER
 // ============================================================
@@ -587,7 +669,7 @@ async function normalizeFbUrl(fbUrl) {
         const r = await axios.get(fbUrl, {
             maxRedirects: 10, timeout: 12000, validateStatus: () => true,
             headers: {
-                'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
                 'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5',
             },
@@ -600,13 +682,16 @@ async function normalizeFbUrl(fbUrl) {
 
 async function downloadFacebookVideo(fbUrl) {
     const realUrl = await normalizeFbUrl(fbUrl);
+    console.log(`[FB] Processing: ${realUrl.substring(0, 80)}`);
+
     const HB = {
-        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     };
 
     const apis = [
+        // 1. SnapSave
         async () => {
             const res = await axios.post('https://snapsave.app/action.php',
                 new URLSearchParams({ url: realUrl }),
@@ -625,6 +710,7 @@ async function downloadFacebookVideo(fbUrl) {
             if (url) return { url, title: 'Facebook Video' };
             throw new Error('SnapSave: no URL found');
         },
+        // 2. Cobalt
         async () => {
             const res = await axios.post('https://api.cobalt.tools/',
                 { url: realUrl, videoQuality: '1080', isAudioOnly: false },
@@ -635,6 +721,7 @@ async function downloadFacebookVideo(fbUrl) {
             if (d?.status === 'redirect' || d?.status === 'stream') return { url: d.url, title: 'Facebook Video' };
             throw new Error(`Cobalt: ${d?.text || d?.status || 'empty'}`);
         },
+        // 3. GetMyFB
         async () => {
             const res = await axios.post('https://getmyfb.com/api/ajaxSearch',
                 new URLSearchParams({ q: realUrl, t: 'media', lang: 'en' }),
@@ -647,6 +734,45 @@ async function downloadFacebookVideo(fbUrl) {
             if (url) return { url, title: 'Facebook Video' };
             throw new Error('GetMyFB: no URL found');
         },
+        // 4. SaveFrom
+        async () => {
+            const res = await axios.get('https://savefrom.net/api/convert', {
+                params: { url: realUrl, lang: 'en' }, timeout: 15000,
+                headers: { ...HB, 'Referer': 'https://savefrom.net/' },
+            });
+            const data = Array.isArray(res.data) ? res.data
+                : (res.data?.url ? [{ url: res.data.url, quality: 'sd', meta: res.data }] : null);
+            if (!data?.length) throw new Error('SaveFrom: empty response');
+            const best = data.find(f => f.quality === 'hd') || data[0];
+            if (best?.url) return { url: best.url, title: best.meta?.title || 'Facebook Video' };
+            throw new Error('SaveFrom: no usable format');
+        },
+        // 5. FBDownloader
+        async () => {
+            const res = await axios.post('https://fbdownloader.net/api/ajaxSearch',
+                new URLSearchParams({ q: realUrl, t: 'home', lang: 'en' }),
+                { timeout: 15000, headers: { ...HB, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://fbdownloader.net/' } }
+            );
+            const html   = res.data?.data || '';
+            const hdUrl  = html.match(/href="([^"]+)"[^>]*>\s*Download HD/i)?.[1];
+            const anyUrl = html.match(/href="(https?:\/\/[^"]+\.mp4[^"]*)"/)?.[1];
+            const url    = hdUrl || anyUrl;
+            if (url) return { url, title: 'Facebook Video' };
+            throw new Error('FBDownloader: no URL found');
+        },
+        // 6. fdown.net
+        async () => {
+            const res = await axios.get('https://fdown.net/download.php', {
+                params: { URLz: realUrl }, timeout: 20000,
+                headers: { ...HB, 'Referer': 'https://fdown.net/' },
+            });
+            const hdUrl  = res.data.match(/id="(?:sdlink|hdlink)"\s+href="([^"]+)"/i)?.[1];
+            const anyUrl = res.data.match(/href="(https?:\/\/[^"]+\.mp4[^"]*)"/i)?.[1];
+            const url    = hdUrl || anyUrl;
+            if (url) return { url, title: 'Facebook Video' };
+            throw new Error('FDown: no URL found');
+        },
+        // 7. yt-dlp
         async () => {
             const ytdl = await getYtDlExec();
             const info = await ytdl(realUrl, {
@@ -666,8 +792,10 @@ async function downloadFacebookVideo(fbUrl) {
 
     for (let i = 0; i < apis.length; i++) {
         try {
+            console.log(`[FB] Trying API #${i + 1}/${apis.length}...`);
             const result = await retryWithBackoff(apis[i], 2, 800);
             if (result?.url) {
+                console.log(`[FB] ✅ API #${i + 1} succeeded`);
                 const sizeInfo = await checkVideoSize(result.url);
                 return { ...result, ...sizeInfo };
             }
@@ -712,6 +840,7 @@ async function getVideoNoWatermark(url) {
     const normalizedUrl = await normalizeUrl(url);
 
     const apis = [
+        // 1. TikWM
         async () => {
             const res = await axios.post('https://www.tikwm.com/api/', { url: normalizedUrl, hd: 1 }, {
                 timeout: 15000, headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
@@ -723,6 +852,7 @@ async function getVideoNoWatermark(url) {
             }
             throw new Error('TikWM failed');
         },
+        // 2. SSSTik
         async () => {
             const res = await axios.post('https://ssstik.io/abc?url=dl',
                 `id=${encodeURIComponent(normalizedUrl)}&locale=en&tt=d1N4eUs5`,
@@ -732,6 +862,7 @@ async function getVideoNoWatermark(url) {
             if (m) return { url: m[1], title: 'TikTok Video' };
             throw new Error('SSSTik failed');
         },
+        // 3. SnapTik
         async () => {
             const res = await axios.get('https://snaptikvideo.com/tikwm.php', {
                 params: { url: normalizedUrl, hd: 1 }, timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -739,6 +870,7 @@ async function getVideoNoWatermark(url) {
             if (res.data?.url) return { url: res.data.url, title: 'TikTok Video' };
             throw new Error('SnapTik failed');
         },
+        // 4. TikMate
         async () => {
             const res = await axios.post('https://api.tikmate.app/api/lookup',
                 new URLSearchParams({ url: normalizedUrl }),
@@ -747,6 +879,15 @@ async function getVideoNoWatermark(url) {
             if (res.data?.token && res.data?.id)
                 return { url: `https://tikmate.app/download/${res.data.token}/${res.data.id}.mp4`, title: 'TikTok Video' };
             throw new Error('TikMate failed');
+        },
+        // 5. Cobalt fallback
+        async () => {
+            const res = await axios.post('https://api.cobalt.tools/',
+                { url: normalizedUrl, videoQuality: '1080' },
+                { timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+            );
+            if (res.data?.url) return { url: res.data.url, title: 'TikTok Video' };
+            throw new Error('Cobalt TikTok failed');
         },
     ];
 
@@ -761,34 +902,172 @@ async function getVideoNoWatermark(url) {
 }
 
 // ============================================================
-// ▶️ YOUTUBE DOWNLOADER
+// ▶️ YOUTUBE DOWNLOADER (v2 — cải thiện mạnh)
 // ============================================================
 async function downloadYouTubeVideo(url) {
+    console.log(`[YT] Processing: ${url}`);
+
+    // Chuẩn hóa URL YouTube Shorts
+    url = url.replace(/youtube\.com\/shorts\//, 'youtube.com/watch?v=');
+
+    // ── Strategy 1: yt-dlp local ──────────────────────────────
     try {
-        const ytdl    = await getYtDlExec();
-        const tempPath= path.join(__dirname, `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
-        const info    = await ytdl(url, {
-            dumpSingleJson: true, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'],
+        const ytdlpPath = await getYtDlpPath();
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFA = promisify(execFile);
+
+        // Lấy info trước
+        let info;
+        try {
+            const { stdout } = await execFA(ytdlpPath, [
+                '--dump-single-json', '--no-warnings', '--no-check-certificates',
+                '--add-header', 'User-Agent:Mozilla/5.0',
+                '--add-header', 'Accept-Language:en-US,en;q=0.9',
+                url,
+            ], { timeout: 30000, maxBuffer: 10 * 1024 * 1024 });
+            info = JSON.parse(stdout);
+        } catch (e) {
+            console.log('[YT] yt-dlp info failed:', e.message);
+        }
+
+        if (info) {
+            if (info.duration > 600) throw new Error('Video quá dài (chỉ hỗ trợ dưới 10 phút)');
+
+            const tempPath = path.join(__dirname, `yt_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+
+            // Chọn format: ưu tiên video+audio mp4 <= 50MB
+            const fmtArgs = [
+                '-f', 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[ext=mp4]/best',
+                '--merge-output-format', 'mp4',
+            ];
+
+            try {
+                await execFA(ytdlpPath, [
+                    ...fmtArgs,
+                    '--no-warnings', '--no-check-certificates',
+                    '--add-header', 'User-Agent:Mozilla/5.0',
+                    '-o', tempPath,
+                    url,
+                ], { timeout: 180000, maxBuffer: 50 * 1024 * 1024 });
+
+                if (fs.existsSync(tempPath)) {
+                    const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+                    console.log(`[YT] ✅ yt-dlp download OK — ${sizeMB.toFixed(1)} MB`);
+                    return {
+                        isLocal: true, localPath: tempPath, url,
+                        title: info.title || 'YouTube Video',
+                        sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB,
+                    };
+                }
+            } catch (e2) {
+                console.log('[YT] yt-dlp download failed:', e2.message);
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            }
+        }
+    } catch (e) {
+        console.log('[YT] yt-dlp strategy error:', e.message);
+    }
+
+    // ── Strategy 2: Cobalt ────────────────────────────────────
+    try {
+        const res = await axios.post('https://api.cobalt.tools/',
+            { url, videoQuality: '720', vCodec: 'h264' },
+            { timeout: 25000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+        );
+        if (res.data?.url) {
+            console.log('[YT] ✅ Cobalt succeeded');
+            const sz = await checkVideoSize(res.data.url);
+            return { url: res.data.url, title: res.data.filename || 'YouTube Video', ...sz };
+        }
+    } catch (e) { console.log('[YT] Cobalt failed:', e.message); }
+
+    // ── Strategy 3: y2mate-style API ──────────────────────────
+    try {
+        const vidId = url.match(/(?:v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1];
+        if (vidId) {
+            const res = await axios.post('https://www.y2mate.com/mates/analyzeV2/ajax',
+                new URLSearchParams({ k_query: `https://www.youtube.com/watch?v=${vidId}`, k_page: 'home', hl: 'en', q_auto: '0' }),
+                { timeout: 20000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.y2mate.com/' } }
+            );
+            const links = res.data?.links?.mp4;
+            if (links) {
+                const best = Object.values(links).sort((a, b) => (parseInt(b.q) || 0) - (parseInt(a.q) || 0))[0];
+                if (best?.k) {
+                    const res2 = await axios.post('https://www.y2mate.com/mates/convertV2/index',
+                        new URLSearchParams({ vid: vidId, k: best.k }),
+                        { timeout: 20000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.y2mate.com/' } }
+                    );
+                    if (res2.data?.dlink) {
+                        const sz = await checkVideoSize(res2.data.dlink);
+                        return { url: res2.data.dlink, title: res.data?.title || 'YouTube Video', ...sz };
+                    }
+                }
+            }
+        }
+    } catch (e) { console.log('[YT] y2mate failed:', e.message); }
+
+    // ── Strategy 4: 9xbuddy ───────────────────────────────────
+    try {
+        const res = await axios.get(`https://9xbuddy.in/process?url=${encodeURIComponent(url)}`, {
+            timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
         });
-        if (info.duration > 600) throw new Error('Video quá dài (chỉ hỗ trợ dưới 10 phút)');
-        await ytdl(url, {
-            output: tempPath, format: 'bestvideo+bestaudio/best',
-            noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'],
-        });
+        const formats = res.data?.formats || res.data?.data?.formats || [];
+        const mp4 = formats.filter(f => f.extension === 'mp4' && f.url).sort((a, b) => (parseInt(b.quality) || 0) - (parseInt(a.quality) || 0))[0];
+        if (mp4?.url) {
+            const sz = await checkVideoSize(mp4.url);
+            return { url: mp4.url, title: res.data?.title || 'YouTube Video', ...sz };
+        }
+    } catch (e) { console.log('[YT] 9xbuddy failed:', e.message); }
+
+    console.log('[YT] ❌ All strategies failed');
+    return null;
+}
+
+// ============================================================
+// 🎵 YOUTUBE MP3 DOWNLOADER
+// ============================================================
+async function downloadYouTubeAudio(url) {
+    console.log(`[YT-MP3] Processing: ${url}`);
+    url = url.replace(/youtube\.com\/shorts\//, 'youtube.com/watch?v=');
+
+    // Strategy 1: yt-dlp audio extraction
+    try {
+        const ytdlpPath = await getYtDlpPath();
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFA = promisify(execFile);
+        const tempPath = path.join(__dirname, `ytmp3_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
+
+        let info;
+        try {
+            const { stdout } = await execFA(ytdlpPath, [
+                '--dump-single-json', '--no-warnings', '--no-check-certificates', url,
+            ], { timeout: 15000, maxBuffer: 5 * 1024 * 1024 });
+            info = JSON.parse(stdout);
+        } catch (_) {}
+
+        await execFA(ytdlpPath, [
+            '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+            '--no-warnings', '--no-check-certificates',
+            '-o', tempPath, url,
+        ], { timeout: 180000, maxBuffer: 50 * 1024 * 1024 });
+
         if (fs.existsSync(tempPath)) {
             const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
-            return { isLocal: true, localPath: tempPath, url, title: info.title || 'YouTube Video', sizeMB, isTooLarge: sizeMB > botSettings.maxFileSizeMB };
+            return { isAudio: true, isLocal: true, localPath: tempPath, title: info?.title || 'YouTube Audio', sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB };
         }
-        throw new Error('yt-dlp download failed');
-    } catch (e) {
-        console.error('[YT] yt-dlp failed:', e.message);
-        try {
-            const res = await axios.post('https://api.cobalt.tools/', { url, videoQuality: '720', vCodec: 'h264' }, {
-                timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-            });
-            if (res.data?.url) return { url: res.data.url, title: res.data.filename || 'YouTube Video', sizeMB: 0, isTooLarge: false };
-        } catch (_) {}
-    }
+    } catch (e) { console.log('[YT-MP3] yt-dlp failed:', e.message); }
+
+    // Strategy 2: Cobalt audio
+    try {
+        const res = await axios.post('https://api.cobalt.tools/',
+            { url, isAudioOnly: true, aFormat: 'mp3' },
+            { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+        );
+        if (res.data?.url) return { isAudio: true, url: res.data.url, title: 'YouTube Audio', sizeMB: 0, isTooLarge: false };
+    } catch (e) { console.log('[YT-MP3] Cobalt failed:', e.message); }
+
     return null;
 }
 
@@ -797,6 +1076,7 @@ async function downloadYouTubeVideo(url) {
 // ============================================================
 async function downloadInstagramVideo(url) {
     const apis = [
+        // 1. SnapInsta
         async () => {
             const res = await axios.post('https://snapinsta.app/action.php', new URLSearchParams({ url }), {
                 timeout: 15000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://snapinsta.app/' },
@@ -805,6 +1085,7 @@ async function downloadInstagramVideo(url) {
             if (m) return { url: m[1], title: 'Instagram Video' };
             throw new Error('SnapInsta failed');
         },
+        // 2. SSSInsta
         async () => {
             const res = await axios.post('https://sssinsta.com/action.php', new URLSearchParams({ url }), {
                 timeout: 15000, headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://sssinsta.com/' },
@@ -813,12 +1094,31 @@ async function downloadInstagramVideo(url) {
             if (m) return { url: m[1], title: 'Instagram Video' };
             throw new Error('SSSInsta failed');
         },
+        // 3. IGram
         async () => {
             const res = await axios.get(`https://igram.world/api/convert?url=${encodeURIComponent(url)}`, {
                 timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' },
             });
             if (res.data?.url) return { url: res.data.url, title: 'Instagram Video' };
             throw new Error('IGram failed');
+        },
+        // 4. Cobalt
+        async () => {
+            const res = await axios.post('https://api.cobalt.tools/',
+                { url, videoQuality: '1080' },
+                { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+            );
+            if (res.data?.url) return { url: res.data.url, title: 'Instagram Video' };
+            throw new Error('Cobalt Instagram failed');
+        },
+        // 5. yt-dlp
+        async () => {
+            const ytdl = await getYtDlExec();
+            const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'] });
+            const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+            if (best?.url) return { url: best.url, title: info.title || 'Instagram Video' };
+            if (info.url)  return { url: info.url,  title: info.title || 'Instagram Video' };
+            throw new Error('yt-dlp Instagram failed');
         },
     ];
     for (const api of apis) {
@@ -835,6 +1135,7 @@ async function downloadInstagramVideo(url) {
 // ============================================================
 async function downloadTwitterVideo(url) {
     const apis = [
+        // 1. TwitSave
         async () => {
             const res = await axios.get(`https://twitsave.com/info?url=${encodeURIComponent(url)}`, {
                 timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -843,6 +1144,7 @@ async function downloadTwitterVideo(url) {
             if (m) return { url: m[1], title: 'Twitter Video' };
             throw new Error('TwitSave failed');
         },
+        // 2. SaveTweetVid
         async () => {
             const res = await axios.post('https://www.savetweetvid.com/downloader',
                 new URLSearchParams({ url }),
@@ -852,12 +1154,21 @@ async function downloadTwitterVideo(url) {
             if (m) return { url: m[1], title: 'Twitter Video' };
             throw new Error('SaveTweetVid failed');
         },
+        // 3. Cobalt
         async () => {
             const res = await axios.post('https://api.cobalt.tools/', { url }, {
                 timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
             });
             if (res.data?.url) return { url: res.data.url, title: 'Twitter Video' };
             throw new Error('Cobalt Twitter failed');
+        },
+        // 4. yt-dlp
+        async () => {
+            const ytdl = await getYtDlExec();
+            const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'] });
+            const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+            if (best?.url) return { url: best.url, title: info.title || 'Twitter Video' };
+            throw new Error('yt-dlp Twitter failed');
         },
     ];
     for (const api of apis) {
@@ -873,29 +1184,68 @@ async function downloadTwitterVideo(url) {
 // 🤖 REDDIT DOWNLOADER
 // ============================================================
 async function downloadRedditVideo(url) {
+    // Strategy 1: Reddit JSON API
     try {
-        const apiUrl  = url.replace(/\/$/, '') + '.json';
-        const res     = await axios.get(apiUrl, {
+        const apiUrl = url.replace(/\/$/, '') + '.json';
+        const res    = await axios.get(apiUrl, {
             timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NobitaBot/4.2)' },
         });
-        const post    = res.data?.[0]?.data?.children?.[0]?.data;
-        const videoUrl= post?.secure_media?.reddit_video?.fallback_url || post?.media?.reddit_video?.fallback_url;
-        if (videoUrl) return { url: videoUrl, title: post.title || 'Reddit Video', sizeMB: 0, isTooLarge: false };
-        throw new Error('No video in Reddit post');
-    } catch (e) { console.error('[Reddit]', e.message); return null; }
+        const post     = res.data?.[0]?.data?.children?.[0]?.data;
+        const videoUrl = post?.secure_media?.reddit_video?.fallback_url || post?.media?.reddit_video?.fallback_url;
+        if (videoUrl) {
+            const sz = await checkVideoSize(videoUrl);
+            return { url: videoUrl, title: post.title || 'Reddit Video', ...sz };
+        }
+    } catch (e) { console.log('[Reddit] JSON API failed:', e.message); }
+
+    // Strategy 2: yt-dlp
+    try {
+        const ytdl = await getYtDlExec();
+        const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
+        const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+        if (best?.url) { const sz = await checkVideoSize(best.url); return { url: best.url, title: info.title || 'Reddit Video', ...sz }; }
+    } catch (e) { console.log('[Reddit] yt-dlp failed:', e.message); }
+
+    // Strategy 3: Cobalt
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url }, {
+            timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        });
+        if (res.data?.url) { const sz = await checkVideoSize(res.data.url); return { url: res.data.url, title: 'Reddit Video', ...sz }; }
+    } catch (e) { console.log('[Reddit] Cobalt failed:', e.message); }
+
+    return null;
 }
 
 // ============================================================
 // 📺 BILIBILI DOWNLOADER
 // ============================================================
 async function downloadBilibiliVideo(url) {
+    // Strategy 1: injahow API
     try {
         const res = await axios.get(`https://api.injahow.cn/bparse/?url=${encodeURIComponent(url)}&type=json`, {
             timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         if (res.data?.url) { const sz = await checkVideoSize(res.data.url); return { url: res.data.url, title: res.data.title || 'Bilibili Video', ...sz }; }
-        throw new Error('Bilibili API failed');
-    } catch (e) { console.error('[Bilibili]', e.message); return null; }
+    } catch (e) { console.log('[Bilibili] injahow failed:', e.message); }
+
+    // Strategy 2: Cobalt
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url, videoQuality: '1080' }, {
+            timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        });
+        if (res.data?.url) { const sz = await checkVideoSize(res.data.url); return { url: res.data.url, title: 'Bilibili Video', ...sz }; }
+    } catch (e) { console.log('[Bilibili] Cobalt failed:', e.message); }
+
+    // Strategy 3: yt-dlp
+    try {
+        const ytdl = await getYtDlExec();
+        const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'] });
+        const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+        if (best?.url) { const sz = await checkVideoSize(best.url); return { url: best.url, title: info.title || 'Bilibili Video', ...sz }; }
+    } catch (e) { console.log('[Bilibili] yt-dlp failed:', e.message); }
+
+    return null;
 }
 
 // ============================================================
@@ -912,57 +1262,60 @@ async function downloadPinterestMedia(url) {
         } catch (_) {}
     }
 
-    const strategies = [
-        async () => {
-            const pinId = url.match(/\/pin\/(\d+)/)?.[1];
-            if (!pinId) throw new Error('No pin ID');
-            const r = await axios.get(
-                `https://www.pinterest.com/resource/PinResource/get/?source_url=/pin/${pinId}/&data={"options":{"id":"${pinId}","field_set_key":"detailed"},"context":{}}`,
-                { timeout: 12000, headers: { ...H, 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://www.pinterest.com/' } }
-            );
-            const pin  = r.data?.resource_response?.data;
-            if (!pin) throw new Error('No pin data');
-            const vurl = pin?.videos?.video_list?.V_720P?.url || pin?.videos?.video_list?.V_480P?.url;
-            if (vurl) return { url: vurl, title: pin.title || 'Pinterest Video', isImage: false };
-            const iurl = pin?.images?.orig?.url || pin?.images?.['736x']?.url;
-            if (iurl) return { url: iurl, title: pin.title || 'Pinterest Image', isImage: true };
-            throw new Error('No media in pin data');
-        },
-        async () => {
-            const r    = await axios.get(url, { timeout: 15000, headers: { ...H, Accept: 'text/html' }, maxRedirects: 10 });
-            const html = r.data || '';
-            const vm   = html.match(/"url"\s*:\s*"(https:\/\/v\.pinimg\.com\/[^"]+\.mp4[^"]*)"/);
-            if (vm) return { url: vm[1].replace(/\\u002F/g, '/'), title: 'Pinterest Video', isImage: false };
-            for (const p of [
-                /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/,
-                /property="og:image"\s+content="([^"]+)"/,
-                /content="([^"]+)"\s+property="og:image"/,
-            ]) {
-                const m = html.match(p);
-                if (m && m[1].startsWith('http')) {
-                    const imgUrl = m[1].replace(/\\u002F/g, '/').replace(/\/\d+x[\d/]*\//, '/originals/');
-                    return { url: imgUrl, title: 'Pinterest Image', isImage: true };
-                }
-            }
-            throw new Error('No media in HTML');
-        },
-        async () => {
-            const r = await axios.get(`https://www.pinterest.com/oembed.json?url=${encodeURIComponent(url)}`, { timeout: 10000, headers: H });
-            if (!r.data?.thumbnail_url) throw new Error('No thumbnail');
-            const imgUrl = r.data.thumbnail_url.replace(/\/\d+x[\d/]*\//, '/originals/');
-            return { url: imgUrl, title: r.data.title || 'Pinterest Image', isImage: true };
-        },
-        async () => {
-            const r = await axios.post('https://api.cobalt.tools/',
-                { url, videoQuality: '1080' },
-                { timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': UA } }
-            );
-            if (r.data?.url) return { url: r.data.url, title: 'Pinterest Video', isImage: false };
-            throw new Error('Cobalt no result');
-        },
-    ];
+    const s1 = async () => {
+        const pinId = url.match(/\/pin\/(\d+)/)?.[1];
+        if (!pinId) throw new Error('No pin ID');
+        const r = await axios.get(
+            `https://www.pinterest.com/resource/PinResource/get/?source_url=/pin/${pinId}/&data={"options":{"id":"${pinId}","field_set_key":"detailed"},"context":{}}`,
+            { timeout: 12000, headers: { ...H, 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://www.pinterest.com/' } }
+        );
+        const pin = r.data?.resource_response?.data;
+        if (!pin) throw new Error('No pin data');
+        const vurl = pin?.videos?.video_list?.V_720P?.url || pin?.videos?.video_list?.V_480P?.url
+            || pin?.story_pin_data?.pages?.[0]?.blocks?.[0]?.video?.video_list?.V_720P?.url;
+        if (vurl) return { url: vurl, title: pin.title || 'Pinterest Video', isImage: false };
+        const iurl = pin?.images?.orig?.url || pin?.images?.['736x']?.url;
+        if (iurl) return { url: iurl, title: pin.title || 'Pinterest Image', isImage: true };
+        throw new Error('No media in pin data');
+    };
 
-    for (const [i, s] of strategies.entries()) {
+    const s2 = async () => {
+        const r = await axios.get(url, { timeout: 15000, headers: { ...H, Accept: 'text/html' }, maxRedirects: 10 });
+        const html = r.data || '';
+        const vm = html.match(/"url"\s*:\s*"(https:\/\/v\.pinimg\.com\/[^"]+\.mp4[^"]*)"/);
+        if (vm) return { url: vm[1].replace(/\\u002F/g, '/'), title: 'Pinterest Video', isImage: false };
+        for (const p of [
+            /"url"\s*:\s*"(https:\/\/i\.pinimg\.com\/originals\/[^"]+)"/,
+            /property="og:image"\s+content="([^"]+)"/,
+            /content="([^"]+)"\s+property="og:image"/,
+            /"orig"\s*:\s*\{[^}]*"url"\s*:\s*"([^"]+)"/,
+        ]) {
+            const m = html.match(p);
+            if (m && m[1].startsWith('http')) {
+                const imgUrl = m[1].replace(/\\u002F/g, '/').replace(/\/\d+x[\d/]*\//, '/originals/');
+                return { url: imgUrl, title: 'Pinterest Image', isImage: true };
+            }
+        }
+        throw new Error('No media in HTML');
+    };
+
+    const s3 = async () => {
+        const r = await axios.get(`https://www.pinterest.com/oembed.json?url=${encodeURIComponent(url)}`, { timeout: 10000, headers: H });
+        if (!r.data?.thumbnail_url) throw new Error('No thumbnail');
+        const imgUrl = r.data.thumbnail_url.replace(/\/\d+x[\d/]*\//, '/originals/');
+        return { url: imgUrl, title: r.data.title || 'Pinterest Image', isImage: true };
+    };
+
+    const s4 = async () => {
+        const r = await axios.post('https://api.cobalt.tools/',
+            { url, videoQuality: '1080' },
+            { timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': UA } }
+        );
+        if (r.data?.url) return { url: r.data.url, title: 'Pinterest Video', isImage: false };
+        throw new Error('Cobalt no result');
+    };
+
+    for (const [i, s] of [s1, s2, s3, s4].entries()) {
         try {
             const result = await retryWithBackoff(s, 2, 600);
             if (result?.url) {
@@ -978,12 +1331,22 @@ async function downloadPinterestMedia(url) {
 // 👻 SNAPCHAT DOWNLOADER
 // ============================================================
 async function downloadSnapchatVideo(url) {
+    // Strategy 1: Cobalt
     try {
         const res = await axios.post('https://api.cobalt.tools/', { url }, {
             timeout: 15000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
         });
-        if (res.data?.url) return { url: res.data.url, title: 'Snapchat Video', sizeMB: 0, isTooLarge: false };
-    } catch (e) { console.error('[Snapchat]', e.message); }
+        if (res.data?.url) { const sz = await checkVideoSize(res.data.url); return { url: res.data.url, title: 'Snapchat Video', ...sz }; }
+    } catch (e) { console.log('[Snapchat] Cobalt failed:', e.message); }
+
+    // Strategy 2: yt-dlp
+    try {
+        const ytdl = await getYtDlExec();
+        const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
+        const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+        if (best?.url) { const sz = await checkVideoSize(best.url); return { url: best.url, title: 'Snapchat Video', ...sz }; }
+    } catch (e) { console.log('[Snapchat] yt-dlp failed:', e.message); }
+
     return null;
 }
 
@@ -991,19 +1354,112 @@ async function downloadSnapchatVideo(url) {
 // 🎧 SOUNDCLOUD DOWNLOADER
 // ============================================================
 async function downloadSoundCloudAudio(url) {
+    // Strategy 1: yt-dlp local
     try {
-        const ytdl    = await getYtDlExec();
-        const tempPath= path.join(__dirname, `sc_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
-        const info    = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'] });
-        await ytdl(url, { extractAudio: true, audioFormat: 'mp3', audioQuality: '0', output: tempPath, noWarnings: true, noCheckCertificates: true, addHeader: ['User-Agent:Mozilla/5.0'] });
-        if (!fs.existsSync(tempPath)) throw new Error('SoundCloud: download failed');
-        const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
-        return { isAudio: true, isLocal: true, localPath: tempPath, title: info.title || 'SoundCloud Audio', sizeMB, isTooLarge: sizeMB > botSettings.maxFileSizeMB };
-    } catch (e) { throw new Error(e.message || 'SoundCloud download failed'); }
+        const ytdlpPath = await getYtDlpPath();
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFA = promisify(execFile);
+        const tempPath = path.join(__dirname, `sc_${Date.now()}_${Math.random().toString(36).slice(2)}.mp3`);
+
+        let info;
+        try {
+            const { stdout } = await execFA(ytdlpPath, ['--dump-single-json', '--no-warnings', '--no-check-certificates', url], { timeout: 15000, maxBuffer: 5 * 1024 * 1024 });
+            info = JSON.parse(stdout);
+        } catch (_) {}
+
+        await execFA(ytdlpPath, [
+            '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+            '--no-warnings', '--no-check-certificates',
+            '-o', tempPath, url,
+        ], { timeout: 120000, maxBuffer: 50 * 1024 * 1024 });
+
+        if (fs.existsSync(tempPath)) {
+            const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+            return { isAudio: true, isLocal: true, localPath: tempPath, title: info?.title || 'SoundCloud Audio', sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB };
+        }
+    } catch (e) { console.log('[SC] yt-dlp failed:', e.message); }
+
+    // Strategy 2: Cobalt
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url, isAudioOnly: true }, {
+            timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        });
+        if (res.data?.url) return { isAudio: true, url: res.data.url, title: 'SoundCloud Audio', sizeMB: 0, isTooLarge: false };
+    } catch (e) { console.log('[SC] Cobalt failed:', e.message); }
+
+    throw new Error('SoundCloud download failed — thử lại sau.');
 }
 
 // ============================================================
-// ✈️ TELEGRAM PROTECTED MEDIA DOWNLOADER (FIX 413)
+// 🎞️ VIMEO DOWNLOADER
+// ============================================================
+async function downloadVimeoVideo(url) {
+    // Strategy 1: yt-dlp
+    try {
+        const ytdlpPath = await getYtDlpPath();
+        const { execFile } = require('child_process');
+        const { promisify } = require('util');
+        const execFA = promisify(execFile);
+        const tempPath = path.join(__dirname, `vm_${Date.now()}_${Math.random().toString(36).slice(2)}.mp4`);
+
+        const { stdout } = await execFA(ytdlpPath, [
+            '--dump-single-json', '--no-warnings', '--no-check-certificates', url,
+        ], { timeout: 15000, maxBuffer: 5 * 1024 * 1024 });
+        const info = JSON.parse(stdout);
+        if (info.duration > 600) throw new Error('Video quá dài (chỉ hỗ trợ dưới 10 phút)');
+
+        await execFA(ytdlpPath, [
+            '-f', 'bestvideo[height<=720]+bestaudio/best[height<=720]/best',
+            '--merge-output-format', 'mp4',
+            '--no-warnings', '--no-check-certificates', '-o', tempPath, url,
+        ], { timeout: 180000, maxBuffer: 50 * 1024 * 1024 });
+
+        if (fs.existsSync(tempPath)) {
+            const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+            return { isLocal: true, localPath: tempPath, url, title: info.title || 'Vimeo Video', sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB };
+        }
+    } catch (e) { console.log('[Vimeo] yt-dlp failed:', e.message); }
+
+    // Strategy 2: Cobalt
+    try {
+        const res = await axios.post('https://api.cobalt.tools/', { url, videoQuality: '720' }, {
+            timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        });
+        if (res.data?.url) { const sz = await checkVideoSize(res.data.url); return { url: res.data.url, title: 'Vimeo Video', ...sz }; }
+    } catch (e) { console.log('[Vimeo] Cobalt failed:', e.message); }
+
+    return null;
+}
+
+// ============================================================
+// 📹 DAILYMOTION DOWNLOADER
+// ============================================================
+async function downloadDailymotionVideo(url) {
+    try {
+        const vidId = url.match(/dailymotion\.com\/video\/([\w]+)/)?.[1];
+        if (!vidId) throw new Error('No video ID');
+        const res = await axios.get(`https://www.dailymotion.com/player/metadata/video/${vidId}`, {
+            timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' },
+        });
+        const qualities = res.data?.qualities?.auto || res.data?.qualities?.['1080'] || res.data?.qualities?.['720'] || [];
+        const best = Array.isArray(qualities) ? qualities[0] : null;
+        if (best?.url) { const sz = await checkVideoSize(best.url); return { url: best.url, title: res.data?.title || 'Dailymotion Video', ...sz }; }
+    } catch (e) { console.log('[DM] API failed:', e.message); }
+
+    // Fallback: yt-dlp
+    try {
+        const ytdl = await getYtDlExec();
+        const info = await ytdl(url, { dumpSingleJson: true, noWarnings: true, noCheckCertificates: true });
+        const best = (info.formats || []).filter(f => f.vcodec !== 'none').sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+        if (best?.url) { const sz = await checkVideoSize(best.url); return { url: best.url, title: info.title || 'Dailymotion Video', ...sz }; }
+    } catch (e) { console.log('[DM] yt-dlp failed:', e.message); }
+
+    return null;
+}
+
+// ============================================================
+// ✈️ TELEGRAM PROTECTED MEDIA DOWNLOADER
 // ============================================================
 function parseTelegramLink(url) {
     const m = url.match(/https?:\/\/t\.me\/(?:c\/(\d+)|([a-zA-Z0-9_]+))\/(\d+)/);
@@ -1030,7 +1486,6 @@ async function downloadTelegramMedia(url, progressCb) {
     const info    = parseTelegramLink(url);
     if (!info) throw new Error('Link Telegram không hợp lệ. Dùng định dạng: https://t.me/channel/123');
 
-    // Resolve entity
     let entity;
     try {
         if (info.isPrivate) {
@@ -1042,77 +1497,34 @@ async function downloadTelegramMedia(url, progressCb) {
         throw new Error(`Không thể truy cập kênh "${info.username || info.channelId}".\nĐảm bảo tài khoản đã tham gia kênh này. (${e.message})`);
     }
 
-    // Lấy tin nhắn
     const messages = await tgClient.getMessages(entity, { ids: [info.msgId] });
     const msg      = messages?.[0];
     if (!msg)       throw new Error('Không tìm thấy tin nhắn. Kiểm tra lại link.');
     if (!msg.media) throw new Error('Tin nhắn này không có media (nhạc/video/ảnh).');
 
-    // ── Phân tích metadata đầy đủ ──────────────────────────
-    let filename  = `tg_media_${Date.now()}`;
-    let isAudio   = false;
-    let isPhoto   = false;
-    let fileSize  = 0;
-    let duration  = 0;
-    let performer = '';
-    let trackTitle= '';
-    let mimeType  = '';
-    let waveform  = null; // dữ liệu sóng âm
+    let filename = `tg_media_${Date.now()}`;
+    let isAudio  = false;
+    let isPhoto  = false;
 
     const doc = msg.media?.document;
-    if (doc) {
-        fileSize = Number(doc.size || 0);
-        mimeType = doc.mimeType || '';
-        for (const a of (doc.attributes || [])) {
-            if (a.className === 'DocumentAttributeFilename' && a.fileName) {
-                filename = a.fileName;
-            }
+    if (doc?.attributes) {
+        for (const a of doc.attributes) {
+            if (a.className === 'DocumentAttributeFilename' && a.fileName) filename = a.fileName;
             if (a.className === 'DocumentAttributeAudio') {
-                isAudio    = true;
-                duration   = a.duration  || 0;
-                trackTitle = a.title     || '';
-                performer  = a.performer || '';
-                waveform   = a.waveform  || null; // Buffer sóng âm gốc
-                if (trackTitle) filename = (performer ? `${performer} - ${trackTitle}` : trackTitle) + '.mp3';
+                isAudio = true;
+                const title  = a.title     || '';
+                const artist = a.performer || '';
+                if (title) filename = (artist ? `${artist} - ${title}` : title) + '.mp3';
             }
         }
     }
     if (msg.media?.className === 'MessageMediaPhoto') isPhoto = true;
     if (!filename.includes('.')) filename += isAudio ? '.mp3' : isPhoto ? '.jpg' : '.mp4';
 
-    const sizeMB       = fileSize / 1024 / 1024;
     const safeFilename = filename.replace(/[^\w.\- ]/g, '_').slice(0, 100);
+    const tempPath     = path.join(__dirname, `tg_${Date.now()}_${Math.random().toString(36).slice(2)}_${safeFilename}`);
 
-    console.log(`[TG] File: ${safeFilename} | Size: ${formatFileSize(sizeMB)} | Audio: ${isAudio} | Mime: ${mimeType}`);
-
-    // ── Nếu file > BOT_UPLOAD_LIMIT_MB: trả về flag isForward ─
-    // Bot sẽ dùng MTProto để forward trực tiếp, không re-upload
-    if (sizeMB > BOT_UPLOAD_LIMIT_MB && sizeMB > 0) {
-        console.log(`[TG] File lớn ${formatFileSize(sizeMB)} > ${BOT_UPLOAD_LIMIT_MB}MB → dùng forward MTProto`);
-        return {
-            isForward:  true,        // flag quan trọng: xử lý riêng trong processQueue
-            isLocal:    false,
-            tgMsg:      msg,
-            tgEntity:   entity,
-            tgMsgId:    info.msgId,
-            isAudio,
-            isPhoto,
-            isVideo:    !isAudio && !isPhoto,
-            title:      trackTitle || filename.replace(/\.[^.]+$/, ''),
-            performer,
-            duration,
-            mimeType,
-            waveform,
-            filename:   safeFilename,
-            sizeMB,
-            isTooLarge: false,      // không phải "quá lớn" — sẽ được xử lý bằng forward
-        };
-    }
-
-    // ── File nhỏ ≤ BOT_UPLOAD_LIMIT_MB: tải về local rồi upload ──
-    const tempPath = path.join(__dirname, `tg_${Date.now()}_${Math.random().toString(36).slice(2)}_${safeFilename}`);
     let lastPct = -1;
-
     await tgClient.downloadMedia(msg, {
         outputFile: tempPath,
         progressCallback: (received, total) => {
@@ -1124,57 +1536,18 @@ async function downloadTelegramMedia(url, progressCb) {
 
     if (!fs.existsSync(tempPath)) throw new Error('Tải file thất bại, thử lại sau.');
 
-    const realSizeMB = fs.statSync(tempPath).size / 1024 / 1024;
+    const sizeMB = fs.statSync(tempPath).size / 1024 / 1024;
     return {
-        isLocal:    true,
-        isForward:  false,
-        localPath:  tempPath,
+        isLocal:   true,
+        localPath: tempPath,
         isAudio,
-        isPhoto,
-        isVideo:    !isAudio && !isPhoto,
-        title:      trackTitle || filename.replace(/\.[^.]+$/, ''),
-        performer,
-        duration,
-        mimeType,
-        waveform,
-        filename:   safeFilename,
-        sizeMB:     realSizeMB,
-        isTooLarge: realSizeMB > BOT_UPLOAD_LIMIT_MB,
+        isImage:   isPhoto,
+        isVideo:   !isAudio && !isPhoto,
+        title:     filename.replace(/\.[^.]+$/, ''),
+        filename:  safeFilename,
+        sizeMB,
+        isTooLarge: sizeMB > TG_MAX_UPLOAD_MB,
     };
-}
-
-// ── Forward file lớn qua MTProto (giữ nguyên chất lượng) ────
-async function forwardTelegramMedia(videoData, targetChatId, replyToMsgId, caption) {
-    if (!tgClient) throw new Error('MTProto client chưa kết nối');
-    const { Api } = require('telegram');
-
-    // Lấy peer của chat đích (bot chat với user)
-    // Dùng sendFile để gửi lại file gốc với full quality qua MTProto
-    try {
-        await tgClient.sendFile(targetChatId, {
-            file:       videoData.tgMsg.media.document || videoData.tgMsg.media,
-            caption:    caption || '',
-            replyTo:    replyToMsgId,
-            // Giữ nguyên attributes (bao gồm waveform) → sóng nhạc đầy đủ
-            attributes: videoData.tgMsg.media.document?.attributes || [],
-            mimeType:   videoData.mimeType || undefined,
-            forceDocument: false, // gửi dạng audio/video native, không phải document
-        });
-        return true;
-    } catch (e) {
-        console.error('[TG Forward] sendFile failed:', e.message);
-        // Fallback: forward tin nhắn gốc
-        try {
-            await tgClient.forwardMessages(targetChatId, {
-                messages:   [videoData.tgMsgId],
-                fromPeer:   videoData.tgEntity,
-            });
-            return true;
-        } catch (e2) {
-            console.error('[TG Forward] forwardMessages failed:', e2.message);
-            throw new Error(`Forward thất bại: ${e2.message}`);
-        }
-    }
 }
 
 // ============================================================
@@ -1213,10 +1586,12 @@ async function processQueue() {
             case 'bilibili':       videoData = await downloadBilibiliVideo(req.url);    break;
             case 'snapchat':       videoData = await downloadSnapchatVideo(req.url);    break;
             case 'soundcloud':     videoData = await downloadSoundCloudAudio(req.url);  break;
+            case 'vimeo':          videoData = await downloadVimeoVideo(req.url);       break;
+            case 'dailymotion':    videoData = await downloadDailymotionVideo(req.url); break;
             case 'telegram_media':
                 if (procMsg) {
                     bot.editMessageText(
-                        `✈️ *Đang kết nối Telegram...*\n━━━━━━━━━━━━━━━━━━━━\n⏳ Đang lấy thông tin file...`,
+                        `✈️ *Đang kết nối Telegram...*\n━━━━━━━━━━━━━━━━━━━━\n⏳ Đang lấy file, vui lòng chờ...`,
                         { chat_id: req.chatId, message_id: procMsg.message_id, parse_mode: 'Markdown' }
                     ).catch(() => {});
                 }
@@ -1232,7 +1607,7 @@ async function processQueue() {
             default:               videoData = await getVideoNoWatermark(req.url);      break;
         }
 
-        if (!videoData || (!videoData.url && !videoData.localPath && !videoData.isSlideshow && !videoData.isForward)) {
+        if (!videoData || (!videoData.url && !videoData.localPath && !videoData.isSlideshow)) {
             throw new Error('Could not retrieve media');
         }
 
@@ -1260,70 +1635,22 @@ async function processQueue() {
             return;
         }
 
-        // ── TELEGRAM FORWARD (file lớn > 19MB, giữ nguyên chất lượng) ──
-        if (videoData.isForward) {
-            if (procMsg) {
-                const typeLabel = videoData.isAudio ? '🎵 Audio' : videoData.isVideo ? '🎬 Video' : '📄 File';
-                bot.editMessageText(
-                    `✈️ *Đang gửi ${typeLabel} chất lượng gốc...*\n━━━━━━━━━━━━━━━━━━━━\n` +
-                    `📦 Kích thước: ${formatFileSize(videoData.sizeMB)}\n` +
-                    `⚡ Dùng MTProto để giữ nguyên sóng nhạc & chất lượng`,
-                    { chat_id: req.chatId, message_id: procMsg.message_id, parse_mode: 'Markdown' }
-                ).catch(() => {});
-            }
-
-            try {
-                await forwardTelegramMedia(videoData, req.chatId, req.messageId, botSettings.captionText);
-                stats.successfulDownloads++;
-                dailyStats.downloads++;
-                recordPlatformSuccess(req.platform);
-                maybeSendFun(req.chatId, pickRandom(FUN.successLines));
-                handleComboMessage(req.chatId, req.userId);
-                recordHistory(req.userId, req.url, req.platform);
-                addActivityLog('ok', `✅ TG Forward (${formatFileSize(videoData.sizeMB)}) → @${req.username}`);
-            } catch (fwdErr) {
-                console.error('[TG Forward] failed:', fwdErr.message);
-                // Fallback cuối: thông báo kích thước và link gốc
-                await bot.sendMessage(req.chatId,
-                    `⚠️ *Không thể tự động gửi file ${formatFileSize(videoData.sizeMB)}*\n\n` +
-                    `Bot API Telegram giới hạn upload ~${BOT_UPLOAD_LIMIT_MB}MB.\n\n` +
-                    `💡 *Cách tải thủ công:*\n` +
-                    `1. Mở link gốc bên dưới\n` +
-                    `2. Nhấn giữ file audio → Lưu về máy`,
-                    {
-                        parse_mode: 'Markdown', reply_to_message_id: req.messageId,
-                        reply_markup: { inline_keyboard: [[{ text: '🔗 Mở link gốc', url: req.url }]] },
-                    }
-                );
-            }
-            if (procMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(req.chatId, procMsg.message_id).catch(() => {});
-            saveData();
-            return;
-        }
-
-        // ── Ảnh đơn ────────────────────────────────────────────
+        // ── Ảnh đơn ───────────────────────────────────────────
         if (videoData.isImage) {
             const imgSrc = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
             try {
                 await bot.sendPhoto(req.chatId, imgSrc, {
-                    caption: botSettings.captionText, reply_to_message_id: req.messageId,
+                    caption: botSettings.captionText,
+                    reply_to_message_id: req.messageId,
                 });
             } catch (_) {
                 if (!videoData.isLocal) {
                     const tmpImg = path.join(__dirname, `img_${Date.now()}.jpg`);
-                    const writer = fs.createWriteStream(tmpImg);
-                    const dlr    = await axios.get(videoData.url, {
-                        responseType: 'stream', timeout: 30000,
-                        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.pinterest.com/' },
-                    });
-                    dlr.data.pipe(writer);
-                    await new Promise((ok, fail) => { writer.on('finish', ok); writer.on('error', fail); });
                     try {
+                        await downloadToFile(videoData.url, tmpImg, { 'Referer': 'https://www.pinterest.com/' });
                         await bot.sendPhoto(req.chatId, tmpImg, { caption: botSettings.captionText, reply_to_message_id: req.messageId });
                     } finally { fs.unlink(tmpImg, () => {}); }
-                } else {
-                    throw new Error('Gửi ảnh thất bại');
-                }
+                } else { throw new Error('Gửi ảnh thất bại'); }
             } finally {
                 if (videoData.isLocal && videoData.localPath) fs.unlink(videoData.localPath, () => {});
             }
@@ -1341,43 +1668,60 @@ async function processQueue() {
 
         // ── Audio ──────────────────────────────────────────────
         if (videoData.isAudio) {
-            if (videoData.isTooLarge) {
-                if (videoData.isLocal && videoData.localPath) fs.unlink(videoData.localPath, () => {});
-                await bot.sendMessage(req.chatId,
-                    `⚠️ *Audio quá lớn (${formatFileSize(videoData.sizeMB)})!*\nGiới hạn Bot API: ${BOT_UPLOAD_LIMIT_MB}MB.`,
-                    { parse_mode: 'Markdown', reply_to_message_id: req.messageId }
-                );
-            } else {
-                const audioSrc = videoData.isLocal && videoData.localPath ? videoData.localPath : videoData.url;
-                try {
-                    await bot.sendAudio(req.chatId, audioSrc, {
-                        caption:             botSettings.captionText,
-                        reply_to_message_id: req.messageId,
-                        title:               videoData.title,
-                        performer:           videoData.performer || undefined,
-                        duration:            videoData.duration  || undefined,
-                    });
-                } finally {
-                    if (videoData.isLocal && videoData.localPath) fs.unlink(videoData.localPath, () => {});
+            let localPath = null;
+            let needsCleanup = false;
+
+            try {
+                // Nếu có URL (không phải local), tải về trước
+                if (!videoData.isLocal && videoData.url) {
+                    localPath    = path.join(__dirname, `audio_${Date.now()}.mp3`);
+                    needsCleanup = true;
+                    await downloadToFile(videoData.url, localPath);
+                    const sizeMB = fs.statSync(localPath).size / 1024 / 1024;
+                    videoData    = { ...videoData, isLocal: true, localPath, sizeMB, isTooLarge: sizeMB > TG_MAX_UPLOAD_MB };
+                } else {
+                    localPath = videoData.localPath;
                 }
-                stats.successfulDownloads++;
-                dailyStats.downloads++;
-                recordPlatformSuccess(req.platform);
-                maybeSendFun(req.chatId, pickRandom(FUN.successLines));
-                handleComboMessage(req.chatId, req.userId);
-                recordHistory(req.userId, req.url, req.platform);
-                addActivityLog('ok', `✅ ${p?.name || 'audio'} → @${req.username}`);
+
+                if (videoData.isTooLarge) {
+                    // File > 50MB: không thể gửi qua Bot API
+                    await bot.sendMessage(req.chatId,
+                        `⚠️ *Audio quá lớn (${videoData.sizeMB.toFixed(1)} MB)!*\n` +
+                        `📏 Giới hạn Telegram Bot API: 50 MB\n\n` +
+                        `💡 Dùng Telegram Desktop/Mobile để nhận file lớn hơn.`,
+                        { parse_mode: 'Markdown', reply_to_message_id: req.messageId }
+                    );
+                } else {
+                    await smartSendFile(req.chatId, localPath, {
+                        isAudio: true,
+                        caption: botSettings.captionText,
+                        reply_to_message_id: req.messageId,
+                        title: videoData.title,
+                    });
+                    stats.successfulDownloads++;
+                    dailyStats.downloads++;
+                    recordPlatformSuccess(req.platform);
+                    maybeSendFun(req.chatId, pickRandom(FUN.successLines));
+                    handleComboMessage(req.chatId, req.userId);
+                    recordHistory(req.userId, req.url, req.platform);
+                    addActivityLog('ok', `✅ ${p?.name || 'audio'} → @${req.username}`);
+                }
+            } finally {
+                if (needsCleanup && localPath) fs.unlink(localPath, () => {});
+                else if (videoData.isLocal && videoData.localPath) fs.unlink(videoData.localPath, () => {});
             }
+
             if (procMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(req.chatId, procMsg.message_id).catch(() => {});
             saveData();
             return;
         }
 
-        // ── Video quá lớn: gửi link tải trực tiếp ─────────────
+        // ── Video quá lớn: gửi link ───────────────────────────
         if (videoData.isTooLarge) {
-            if (videoData.isLocal && videoData.localPath) fs.unlink(videoData.localPath, () => {});
             await bot.sendMessage(req.chatId,
-                `⚠️ *File quá lớn (${formatFileSize(videoData.sizeMB)})!*\nGiới hạn ${botSettings.maxFileSizeMB}MB. Bấm bên dưới để tải trực tiếp 👇`,
+                `⚠️ *File quá lớn (${videoData.sizeMB.toFixed(1)} MB)!*\n` +
+                `📏 Giới hạn Telegram Bot API: 50 MB\n` +
+                `👇 Bấm bên dưới để tải trực tiếp:`,
                 {
                     parse_mode: 'Markdown', reply_to_message_id: req.messageId,
                     reply_markup: { inline_keyboard: [[{ text: '🔗 TẢI TRỰC TIẾP', url: videoData.url }]] },
@@ -1390,40 +1734,49 @@ async function processQueue() {
                 if (videoData.isLocal && videoData.localPath) {
                     fs.renameSync(videoData.localPath, tempFile);
                 } else {
-                    const writer = fs.createWriteStream(tempFile);
-                    const dlRes  = await axios.get(videoData.url, {
-                        responseType: 'stream', timeout: 120000,
-                        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.tiktok.com/' },
-                    });
-                    dlRes.data.pipe(writer);
-                    await new Promise((res, rej) => { writer.on('finish', res); writer.on('error', rej); });
+                    await downloadToFile(videoData.url, tempFile, { 'Referer': 'https://www.tiktok.com/' });
                 }
 
-                const mp3Id = Math.random().toString(36).slice(2, 10);
-                setCacheWithTtl(mp3Cache, mp3Id, { url: req.url, platform: req.platform }, MP3_CACHE_TTL);
-                if (mp3Cache.size > 500) mp3Cache.delete(mp3Cache.keys().next().value);
+                const actualSize = fs.statSync(tempFile).size / 1024 / 1024;
+                if (actualSize > TG_MAX_UPLOAD_MB) {
+                    // Sau khi tải mới biết quá lớn
+                    await bot.sendMessage(req.chatId,
+                        `⚠️ *File quá lớn sau khi tải (${actualSize.toFixed(1)} MB)!*\nGiới hạn Telegram Bot API: 50 MB.`,
+                        { parse_mode: 'Markdown', reply_to_message_id: req.messageId }
+                    );
+                } else {
+                    const mp3Id = Math.random().toString(36).slice(2, 10);
+                    setCacheWithTtl(mp3Cache, mp3Id, { url: req.url, platform: req.platform }, MP3_CACHE_TTL);
 
-                await bot.sendVideo(req.chatId, tempFile, {
-                    caption: botSettings.captionText, reply_to_message_id: req.messageId, supports_streaming: true,
-                    reply_markup: botSettings.mp3Button
-                        ? { inline_keyboard: [[{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }]] }
-                        : undefined,
-                });
+                    await smartSendFile(req.chatId, tempFile, {
+                        isVideo: true,
+                        caption: botSettings.captionText,
+                        reply_to_message_id: req.messageId,
+                    });
+
+                    // Nút MP3 (gửi tin nhắn riêng)
+                    if (botSettings.mp3Button) {
+                        bot.sendMessage(req.chatId, '🎵 Muốn tải audio?', {
+                            reply_markup: { inline_keyboard: [[{ text: '🎵 Tải MP3', callback_data: `mp3_${mp3Id}` }]] },
+                        }).catch(() => {});
+                    }
+
+                    stats.successfulDownloads++;
+                    dailyStats.downloads++;
+                    recordPlatformSuccess(req.platform);
+                    maybeSendFun(req.chatId, pickRandom(FUN.successLines));
+                    handleComboMessage(req.chatId, req.userId);
+                    recordHistory(req.userId, req.url, req.platform);
+                    addActivityLog('ok', `✅ ${p?.name || 'video'} → @${req.username}`);
+                }
             } finally {
                 fs.unlink(tempFile, () => {});
             }
-
-            stats.successfulDownloads++;
-            dailyStats.downloads++;
-            recordPlatformSuccess(req.platform);
-            maybeSendFun(req.chatId, pickRandom(FUN.successLines));
-            handleComboMessage(req.chatId, req.userId);
-            recordHistory(req.userId, req.url, req.platform);
-            addActivityLog('ok', `✅ ${p?.name || 'video'} → @${req.username}`);
         }
 
         if (procMsg && botSettings.autoDeleteProcessing) bot.deleteMessage(req.chatId, procMsg.message_id).catch(() => {});
         saveData();
+        console.log(`[✅] ${req.platform} → @${req.username}`);
 
     } catch (err) {
         console.error(`[❌] Error:`, err.message);
@@ -1448,7 +1801,7 @@ async function processQueue() {
         else if (err.message.includes('timeout'))         errMsg += `⏰ Kết nối quá hạn. Vui lòng thử lại.`;
         else if (err.message.includes('quá lớn'))         errMsg += `⚠️ ${err.message}`;
         else if (err.message.includes('quá dài'))         errMsg += `⏱️ ${err.message}`;
-        else if (err.message.includes('chưa được cấu hình')) errMsg += `⚙️ ${err.message}`;
+        else if (err.message.includes('chưa được cấu hình') || err.message.includes('UserClient')) errMsg += `⚙️ ${err.message}`;
         else errMsg += `👾 Lỗi: \`${err.message.substring(0, 80)}\``;
         errMsg += `\n\n💡 Đảm bảo link công khai và có thể xem được.`;
         if (botSettings.funMode) errMsg += `\n\n${pickRandom(FUN.failLines)}`;
@@ -1472,6 +1825,7 @@ async function processQueue() {
 // 💬 BOT COMMANDS
 // ============================================================
 
+// /start
 bot.onText(/^\/start(@\w+)?$/, async (msg) => {
     const chatId   = msg.chat.id;
     const userId   = msg.from?.id;
@@ -1492,7 +1846,8 @@ bot.onText(/^\/start(@\w+)?$/, async (msg) => {
         `├ 🎬 Chất lượng gốc, không watermark\n` +
         `├ 🎵 Trích xuất MP3\n` +
         `├ 🖼️ Tải ảnh Pinterest / TikTok album\n` +
-        `└ ✈️ Tải audio/video Telegram giữ nguyên chất lượng\n\n` +
+        `├ ✈️ Tải media từ kênh Telegram\n` +
+        `└ 🎞️ Hỗ trợ Vimeo, Dailymotion và nhiều hơn\n\n` +
         `🌐 *Hỗ trợ:*\n${platforms}\n\n` +
         `${funLine}\n\n` +
         `💡 Chỉ cần dán link vào đây!\n` +
@@ -1582,7 +1937,7 @@ bot.onText(/^\/status$/, (msg) => {
         `📈 Tỷ lệ: ${rate}%\n` +
         `👥 Users: ${stats.activeUsers.size}\n` +
         `📋 Hàng đợi: ${requestQueue.length}/${MAX_CONCURRENT}\n` +
-        `✈️ Telegram MTProto: ${tgStatus}`,
+        `✈️ Telegram: ${tgStatus}`,
         { parse_mode: 'Markdown' }
     );
 });
@@ -1606,7 +1961,7 @@ bot.onText(/^\/about$/, (msg) => {
         `📱 *Hỗ trợ:* ${Object.keys(PLATFORMS).length} nền tảng\n` +
         `⚡ *Powered by:* Node.js + Telegram Bot API\n` +
         `🧠 *AI:* Google Gemini 1.5 Flash\n` +
-        `✈️ *Telegram MTProto:* ${tgClient ? '✅ Đã kết nối (hỗ trợ file lớn)' : '❌ Chưa cấu hình'}\n\n` +
+        `✈️ *Telegram MTProto:* ${tgClient ? 'Đã kết nối' : 'Chưa cấu hình'}\n\n` +
         `📌 Dán link bất kỳ để bắt đầu tải!`,
         { parse_mode: 'Markdown' }
     );
@@ -1759,7 +2114,7 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
                 `📋 Queue: ${requestQueue.length} | ⚙️ ${processingCount}/${MAX_CONCURRENT}\n` +
                 `📅 Hôm nay: ${dailyStats.requests} req / ${dailyStats.downloads} tải\n` +
                 `🔧 Bảo trì: ${maintenanceMode ? 'BẬT' : 'TẮT'}\n` +
-                `✈️ Telegram MTProto: ${tgClient ? '✅' : '❌'}\n` +
+                `✈️ Telegram: ${tgClient ? '✅' : '❌'}\n` +
                 `⏱️ Uptime: ${formatUptime(process.uptime() * 1000)}`,
                 { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: '🌐 Web Dashboard', url: DASHBOARD_URL }]] } }
             );
@@ -1772,10 +2127,9 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
                 `💾 Memory: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)} MB\n` +
                 `🎯 Platforms: ${Object.keys(PLATFORMS).length}\n` +
                 `⚙️ Max concurrent: ${MAX_CONCURRENT}\n` +
-                `📏 Max file (Bot API): ${BOT_UPLOAD_LIMIT_MB} MB\n` +
-                `📏 Max file (MTProto): Không giới hạn\n` +
+                `📏 TG Upload limit: ${TG_MAX_UPLOAD_MB} MB\n` +
                 `🚦 Rate limit: ${botSettings.defaultRateLimit}/10s\n` +
-                `✈️ Telegram MTProto: ${tgClient ? '✅ Connected' : '❌ Not configured'}`,
+                `✈️ Telegram client: ${tgClient ? '✅ Connected' : '❌ Not configured'}`,
                 { parse_mode: 'Markdown' }
             );
             break;
@@ -1865,6 +2219,7 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
             vipUsers.add(uid); premiumUsers.delete(uid); saveData();
             bot.sendMessage(uid, '🎉 *Chúc mừng!* Bạn đã được nâng cấp *VIP* ⭐', { parse_mode: 'Markdown' }).catch(() => {});
             bot.sendMessage(chatId, `⭐ Cấp VIP cho ID: ${uid}`);
+            addActivityLog('ok', `⭐ Admin cấp VIP cho ID: ${uid}`);
             break;
         }
         case 'removevip': {
@@ -1888,6 +2243,7 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
             premiumUsers.add(uid); saveData();
             bot.sendMessage(uid, '💎 *Chúc mừng!* Bạn đã được nâng cấp *Premium* 💎', { parse_mode: 'Markdown' }).catch(() => {});
             bot.sendMessage(chatId, `💎 Cấp Premium cho ID: ${uid}`);
+            addActivityLog('ok', `💎 Admin cấp Premium cho ID: ${uid}`);
             break;
         }
         case 'removepremium': {
@@ -1959,9 +2315,9 @@ bot.onText(/^\/(\w+)(?:\s(.*))?$/, async (msg, match) => {
         }
         case 'setmaxsize': {
             const size = parseInt(args);
-            if (!size || size < 1 || size > 2000) { bot.sendMessage(chatId, '❌ /setmaxsize <MB>'); break; }
+            if (!size || size < 1) { bot.sendMessage(chatId, '❌ /setmaxsize <MB>'); break; }
             botSettings.maxFileSizeMB = size; saveData();
-            bot.sendMessage(chatId, `✅ Max file: ${size} MB`);
+            bot.sendMessage(chatId, `✅ Max file setting: ${size} MB\n⚠️ Telegram Bot API giới hạn upload 50 MB.`);
             break;
         }
         case 'queue': {
@@ -2000,19 +2356,51 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
+    // MP3 extraction
     if (data.startsWith('mp3_')) {
         const info = getCacheWithTtl(mp3Cache, data.replace('mp3_', ''));
         if (!info) { bot.answerCallbackQuery(query.id, { text: '⚠️ Link đã hết hạn!', show_alert: true }); return; }
         bot.answerCallbackQuery(query.id, { text: '🎵 Đang trích xuất MP3...' });
         const proc = await bot.sendMessage(chatId, '⏳ Đang chuyển đổi MP3...');
         try {
-            let mp3Url = null;
+            // YouTube → yt-dlp audio
+            if (info.platform === 'youtube') {
+                const audioData = await downloadYouTubeAudio(info.url);
+                if (audioData?.isLocal && audioData.localPath) {
+                    try {
+                        await smartSendFile(chatId, audioData.localPath, {
+                            isAudio: true, caption: botSettings.captionText,
+                            reply_to_message_id: messageId, title: audioData.title,
+                        });
+                    } finally { fs.unlink(audioData.localPath, () => {}); }
+                    return;
+                }
+            }
+
+            // TikTok → TikWM music
             if (info.platform === 'tiktok') {
                 const res = await axios.post('https://www.tikwm.com/api/', { url: info.url }, { timeout: 10000 });
-                if (res.data?.data?.music) mp3Url = res.data.data.music;
+                if (res.data?.data?.music) {
+                    await bot.sendAudio(chatId, res.data.data.music, { reply_to_message_id: messageId });
+                    return;
+                }
             }
-            if (mp3Url) await bot.sendAudio(chatId, mp3Url, { reply_to_message_id: messageId });
-            else bot.sendMessage(chatId, '❌ Không tìm thấy audio cho video này.');
+
+            // Generic: Cobalt audio
+            const cobaltRes = await axios.post('https://api.cobalt.tools/',
+                { url: info.url, isAudioOnly: true, aFormat: 'mp3' },
+                { timeout: 20000, headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+            );
+            if (cobaltRes.data?.url) {
+                const tmpAudio = path.join(__dirname, `mp3cb_${Date.now()}.mp3`);
+                try {
+                    await downloadToFile(cobaltRes.data.url, tmpAudio);
+                    await smartSendFile(chatId, tmpAudio, { isAudio: true, caption: botSettings.captionText, reply_to_message_id: messageId });
+                } finally { fs.unlink(tmpAudio, () => {}); }
+                return;
+            }
+
+            bot.sendMessage(chatId, '❌ Không tìm thấy audio cho video này.');
         } catch (e) {
             bot.sendMessage(chatId, '❌ Lỗi trích xuất audio: ' + e.message);
         } finally {
@@ -2021,6 +2409,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
+    // Slideshow photos
     if (data.startsWith('slides_photos_')) {
         const info = getCacheWithTtl(slideshowCache, data.replace('slides_photos_', ''));
         if (!info) { bot.answerCallbackQuery(query.id, { text: '⚠️ Phiên đã hết hạn!', show_alert: true }); return; }
@@ -2034,6 +2423,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
+    // Slideshow music
     if (data.startsWith('slides_music_')) {
         const info = getCacheWithTtl(slideshowCache, data.replace('slides_music_', ''));
         if (!info) { bot.answerCallbackQuery(query.id, { text: '⚠️ Phiên đã hết hạn!', show_alert: true }); return; }
@@ -2045,6 +2435,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
+    // Quiz
     if (data.startsWith('quiz_')) {
         const parts   = data.split('_');
         const info    = getCacheWithTtl(quizCache, parts[1]);
@@ -2536,8 +2927,8 @@ function cleanupTempFiles() {
     let deleted = 0;
     try {
         fs.readdirSync(__dirname).forEach(file => {
-            if ((file.startsWith('temp_') || file.startsWith('yt_') || file.startsWith('sc_') || file.startsWith('tg_') || file.startsWith('img_') || file.startsWith('pin_'))
-                && (file.endsWith('.mp4') || file.endsWith('.mp3') || file.endsWith('.jpg') || file.endsWith('.webp'))) {
+            if ((file.startsWith('temp_') || file.startsWith('yt_') || file.startsWith('sc_') || file.startsWith('tg_') || file.startsWith('img_') || file.startsWith('pin_') || file.startsWith('audio_') || file.startsWith('mp3cb_') || file.startsWith('vm_') || file.startsWith('dm_') || file.startsWith('ytmp3_'))
+                && (file.endsWith('.mp4') || file.endsWith('.mp3') || file.endsWith('.jpg') || file.endsWith('.webp') || file.endsWith('.m4a'))) {
                 const fp = path.join(__dirname, file);
                 try {
                     if ((Date.now() - fs.statSync(fp).mtimeMs) > 600000) { fs.unlinkSync(fp); deleted++; }
@@ -2580,53 +2971,34 @@ scheduleMidnightReport();
 // ============================================================
 // ⚡ AUTO-CONVERSATION
 // ============================================================
-// ===============================
-// CHAT BOT MODE - KHÔNG AUTO CHAT
-// ===============================
+const AUTO_CHAT_INTERVAL = parseInt(process.env.AUTO_CHAT_INTERVAL || String(2 * 60 * 60 * 1000));
+const AUTO_CHAT_ENABLED  = process.env.AUTO_CHAT_ENABLED !== 'false';
 
-const CHATBOT_ENABLED = process.env.CHATBOT_ENABLED !== 'false';
-
-const BOT_REPLY_MESSAGES = [
-    '👋 Chào bạn! Gửi link video bạn muốn tải nhé.',
-    '🎬 Mình hỗ trợ tải video TikTok, Facebook, Instagram, YouTube...',
-    '😊 Bạn gửi link vào đây, mình sẽ xử lý giúp bạn.',
-    '✨ Mình có thể hỗ trợ tải video không watermark nếu link được hỗ trợ.',
+const AUTO_CHAT_MESSAGES = [
+    '👋 Chào bạn! Hôm nay có video hay không? Gửi link cho mình nhé!',
+    '💡 Bạn có biết mình hỗ trợ tải từ TikTok, Facebook, Instagram, YouTube, Vimeo... không?',
+    '🎬 Có link video nào cần tải không? Mình làm trong vài giây thôi!',
+    '✨ Nobita Bot v4.2 vừa được cập nhật! Tải nhanh hơn, ổn định hơn 🚀',
+    '😊 Chào bạn! Mình luôn sẵn sàng giúp tải video không watermark nhé!',
+    '✈️ Bây giờ mình có thể tải nhạc từ kênh Telegram không cho lưu! Thử ngay nào 🎵',
 ];
 
-if (CHATBOT_ENABLED) {
-    bot.on('message', async (msg) => {
-        try {
-            const chatId = msg.chat.id;
-            const userId = msg.from?.id;
-            const text = msg.text || '';
-
-            // Bỏ qua user bị ban / mute
-            if (bannedUsers.has(Number(userId)) || mutedUsers.has(Number(userId))) {
-                return;
-            }
-
-            // Bỏ qua tin nhắn không có text
-            if (!text) return;
-
-            // Nếu người dùng gửi command thì không trả lời linh tinh
-            if (text.startsWith('/')) return;
-
-            // Nếu người dùng gửi link
-            if (/https?:\/\//i.test(text)) {
-                await bot.sendMessage(chatId, '✅ Mình đã nhận được link, đang kiểm tra và xử lý cho bạn...');
-                return;
-            }
-
-            // Tin nhắn thường
-            await bot.sendMessage(chatId, pickRandom(BOT_REPLY_MESSAGES));
-
-        } catch (err) {
-            console.error('Chatbot reply error:', err.message);
+if (AUTO_CHAT_ENABLED) {
+    setInterval(async () => {
+        const users = Array.from(stats.activeUsers.keys()).filter(id => !bannedUsers.has(Number(id)) && !mutedUsers.has(Number(id)));
+        if (!users.length) return;
+        const numUsers = Math.min(Math.floor(Math.random() * 3) + 1, users.length);
+        const selected = [];
+        for (let i = 0; i < numUsers; i++) selected.push(users[Math.floor(Math.random() * users.length)]);
+        for (const uid of selected) {
+            try { await bot.sendMessage(uid, pickRandom(AUTO_CHAT_MESSAGES)); }
+            catch (_) {}
+            await sleep(1000);
         }
-    });
-
-    console.log('✅ Chatbot mode enabled - bot chỉ trả lời khi user nhắn');
+    }, AUTO_CHAT_INTERVAL);
+    console.log(`✅ Auto-conversation enabled (every ${AUTO_CHAT_INTERVAL / 60000} min)`);
 }
+
 // ============================================================
 // 🛑 ERROR HANDLERS
 // ============================================================
@@ -2638,5 +3010,5 @@ process.on('uncaughtException',  err => { console.error('[Uncaught]', err?.messa
 console.log(`🚀 Nobita Bot v${BOT_VERSION} is running!`);
 console.log(`👑 Admin ID:    ${ADMIN_USER_ID}`);
 console.log(`🌐 Platforms:   ${Object.keys(PLATFORMS).join(', ')}`);
-console.log(`✈️  Telegram:    ${tgClient ? 'Client ready (hỗ trợ file lớn qua MTProto)' : 'Not configured'}`);
+console.log(`✈️  Telegram:    ${tgClient ? 'Client ready' : 'Not configured (add env vars)'}`);
 console.log(`🔗 Dashboard:   ${DASHBOARD_URL}`);
