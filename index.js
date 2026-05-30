@@ -50,9 +50,11 @@ let tgClient = null;
             console.warn('⚠️  Telegram UserClient: thiếu TELEGRAM_API_ID/HASH/SESSION — tính năng tải Telegram media bị tắt');
             return;
         }
-       const { TelegramClient } = require('telegram');
+        const { TelegramClient } = require('telegram');
         const { StringSession } = require('telegram/sessions');
         tgClient = new TelegramClient(new StringSession(session), apiId, apiHash, {
+            connectionRetries: 5, autoReconnect: true, useWSS: false,
+        });
         await tgClient.connect();
         if (!await tgClient.isUserAuthorized()) {
             console.warn('⚠️  Telegram UserClient: session không hợp lệ hoặc hết hạn. Chạy lại generateSession.js');
