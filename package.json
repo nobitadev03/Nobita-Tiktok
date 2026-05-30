@@ -24,6 +24,7 @@
     "node-telegram-bot-api": "^0.67.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
+    "telegram": "^2.26.17",
     "winston": "^3.11.0",
     "youtube-dl-exec": "^3.1.4",
     "yt-dlp-exec": "^1.0.2"
